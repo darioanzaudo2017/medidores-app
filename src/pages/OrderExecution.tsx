@@ -10,16 +10,13 @@ import {
     MapPin,
     Save,
     Loader2,
-    AlertCircle,
     User,
-    Phone,
     Hash,
     Check,
     Plus,
     PenTool,
     MessageSquare,
     QrCode,
-    Image as ImageIcon,
     Eraser,
     Calendar
 } from 'lucide-react';
