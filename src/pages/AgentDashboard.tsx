@@ -324,42 +324,43 @@ const AgentDashboard: React.FC = () => {
                                                     <span className="text-xs font-medium">{order.cliente_calle} {order.cliente_numero}</span>
                                                 </div>
                                             </div>
+                                        </td>
+                                        <td className="px-6 py-6">
+                                            <span className={cn(
+                                                "px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest",
+                                                order.estado_nombre === 'EN PROCESO' ? "bg-blue-100 text-blue-700" :
+                                                    order.estado_nombre === 'CERRADO AGENTE' ? "bg-green-100 text-green-700" :
+                                                        "bg-yellow-100 text-yellow-700"
+                                            )}>
+                                                {order.estado_nombre}
+                                            </span>
+                                        </td>
+                                        {activeTab === 'closed' && (
                                             <td className="px-6 py-6">
-                                                <span className={cn(
-                                                    "px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest",
-                                                    order.estado_nombre === 'EN PROCESO' ? "bg-blue-100 text-blue-700" :
-                                                        order.estado_nombre === 'CERRADO AGENTE' ? "bg-green-100 text-green-700" :
-                                                            "bg-yellow-100 text-yellow-700"
-                                                )}>
-                                                    {order.estado_nombre}
+                                                <span className="text-xs font-bold text-gray-600">
+                                                    {(order as any).motivo_cierre_nombre || '---'}
                                                 </span>
                                             </td>
-                                            {activeTab === 'closed' && (
-                                                <td className="px-6 py-6">
-                                                    <span className="text-xs font-bold text-gray-600">
-                                                        {(order as any).motivo_cierre_nombre || '---'}
-                                                    </span>
-                                                </td>
-                                            )}
-                                            <td className="px-6 py-6 text-right">
-                                                <button
-                                                    onClick={() => navigate(`/orden/${order.id_orden}/ejecutar`)}
-                                                    className={cn(
-                                                        "inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all active:scale-95 shadow-lg",
-                                                        order.estado_nombre === 'EN PROCESO' ? "bg-blue-600 text-white shadow-blue-500/10 hover:bg-blue-700" :
-                                                            order.estado_nombre === 'CERRADO AGENTE' ? "bg-gray-100 text-gray-600 shadow-none hover:bg-gray-200" :
-                                                                "bg-blue-600 text-white shadow-blue-500/10 hover:bg-blue-700"
-                                                    )}
-                                                >
-                                                    {order.estado_nombre === 'EN PROCESO' ? (
-                                                        <><span>Continuar</span> <ChevronRight className="w-4 h-4" /></>
-                                                    ) : order.estado_nombre === 'CERRADO AGENTE' ? (
-                                                        <><span>Ver Detalle</span> <ChevronRight className="w-4 h-4" /></>
-                                                    ) : (
-                                                        <><span>Iniciar</span> <Play className="w-4 h-4" /></>
-                                                    )}
-                                                </button>
-                                            </td>
+                                        )}
+                                        <td className="px-6 py-6 text-right">
+                                            <button
+                                                onClick={() => navigate(`/orden/${order.id_orden}/ejecutar`)}
+                                                className={cn(
+                                                    "inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all active:scale-95 shadow-lg",
+                                                    order.estado_nombre === 'EN PROCESO' ? "bg-blue-600 text-white shadow-blue-500/10 hover:bg-blue-700" :
+                                                        order.estado_nombre === 'CERRADO AGENTE' ? "bg-gray-100 text-gray-600 shadow-none hover:bg-gray-200" :
+                                                            "bg-blue-600 text-white shadow-blue-500/10 hover:bg-blue-700"
+                                                )}
+                                            >
+                                                {order.estado_nombre === 'EN PROCESO' ? (
+                                                    <><span>Continuar</span> <ChevronRight className="w-4 h-4" /></>
+                                                ) : order.estado_nombre === 'CERRADO AGENTE' ? (
+                                                    <><span>Ver Detalle</span> <ChevronRight className="w-4 h-4" /></>
+                                                ) : (
+                                                    <><span>Iniciar</span> <Play className="w-4 h-4" /></>
+                                                )}
+                                            </button>
+                                        </td>
                                     </tr>
                                 ))
                             )}
