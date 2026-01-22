@@ -343,9 +343,9 @@ const OrderExecution: React.FC = () => {
     if (!order) return null;
 
     return (
-        <div className="min-h-screen bg-gray-50 flex flex-col animate-in fade-in duration-500">
+        <div className="min-h-screen bg-gray-50 flex flex-col animate-in fade-in duration-500 pb-safe">
             {/* Header */}
-            <header className="bg-white border-b border-gray-100 px-4 py-4 sticky top-0 z-20 shadow-sm">
+            <header className="bg-white border-b border-gray-100 px-4 py-4 sticky top-0 z-20 shadow-sm pt-safe">
                 <div className="max-w-3xl mx-auto flex items-center justify-between">
                     <div className="flex items-center space-x-4">
                         <button onClick={() => navigate('/agente/dashboard')} className="p-3 hover:bg-gray-50 rounded-2xl transition-all text-gray-600"><ArrowLeft className="w-5 h-5" /></button>
@@ -412,7 +412,7 @@ const OrderExecution: React.FC = () => {
             </main>
 
             {/* Footer */}
-            <footer className="bg-white border-t border-gray-100 p-4 sticky bottom-0 z-20">
+            <footer className="bg-white border-t border-gray-100 p-4 sticky bottom-0 z-20 pb-safe">
                 <div className="max-w-3xl mx-auto flex items-center justify-between gap-4">
                     <button onClick={() => setStep(s => Math.max(1, s - 1))} disabled={step === 1 || saving} className="flex-1 py-4 rounded-2xl font-black text-xs uppercase bg-gray-100 text-gray-500 disabled:opacity-30">Anterior</button>
                     {isClosed ? (

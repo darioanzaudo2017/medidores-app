@@ -134,7 +134,7 @@ const AgentDashboard: React.FC = () => {
     }, [user, searchTerm, currentPage, activeTab]);
 
     return (
-        <div className="p-4 lg:p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500">
+        <div className="p-4 lg:p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500 pb-safe pt-safe">
             <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
                 <div className="space-y-1">
                     <h1 className="text-3xl font-black text-gray-900 tracking-tight">Mis Tareas</h1>
@@ -374,7 +374,7 @@ const AgentDashboard: React.FC = () => {
                 {/* Pagination */}
                 {
                     totalCount > 0 && (
-                        <div className="p-6 border-t border-gray-50 flex items-center justify-between bg-gray-50/20">
+                        <div className="p-6 border-t border-gray-50 flex items-center justify-between bg-gray-50/20 pb-safe">
                             <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest tabular-nums">
                                 Mostrando {(currentPage - 1) * pageSize + 1} - {Math.min(currentPage * pageSize, totalCount)} de {totalCount}
                             </p>
