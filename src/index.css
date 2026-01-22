@@ -1,0 +1,70 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 221.2 83.2% 53.3%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 221.2 83.2% 53.3%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 224.3 76.3% 48%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background-light dark:bg-background-dark font-display;
+  }
+}
+
+.industrial-overlay {
+  background-image: linear-gradient(rgba(241, 243, 244, 0.92), rgba(241, 243, 244, 0.92)), url(https://lh3.googleusercontent.com/aida-public/AB6AXuDMhH_bqEEBHHY4RIW5FTlteNyvPEg8dgsuHfcw_-zaW0ieRooZfTb3AW7qo1B4bHpV9hqswX5mNcZGCgIwVJ9IcSsdr1-bYRjL3mbvVRBaMHta7QYh7M53onWI-FfCXDIBWaK9YyADVHNm3adxnCKP5IKMAoGK6M9mvv7OAS0HPA0ZDhgIPh8UxHS5zoeKhpWfyLxmns0j3LnCJWdx5Tj6IIP-ZFU18MMPExBOjsvDYDJOzEgxW13aUGUMFqldQTwBfuRf9H6rSPE);
+  background-size: cover;
+  background-position: center;
+}
+
+.dark .industrial-overlay {
+  background-image: linear-gradient(rgba(34, 38, 42, 0.95), rgba(34, 38, 42, 0.95)), url(https://lh3.googleusercontent.com/aida-public/AB6AXuC-vS2KUkROA21w0hb87PZHrnd35CdtO5K-X2q4iRMac5gggiokrft0cyJF4kYz3lsK9n3TxbbhIPDspjufNDcK-ghv_01qeaE5m1G_PDZsMtlJ8B6N66Szk_ao_XnM28vDj80xSQKWrDGAIzBaV_ecf6Ze-TODPCmBvIUpDygbf33E9Z1gBzAlId2YWS35uoGdYu6-qj2egz_3QPISZWDbdO_tQT_D7P4ilOflmOuj0QSg_VDH4_tSwWQ5KK37iYEMGA-XTiGAAL4);
+}
