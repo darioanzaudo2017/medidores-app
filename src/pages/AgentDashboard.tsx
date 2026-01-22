@@ -77,7 +77,11 @@ const AgentDashboard: React.FC = () => {
             }
 
             if (searchTerm) {
-                query = query.or(`cliente_nombre.ilike.%${searchTerm}%,cliente_calle.ilike.%${searchTerm}%,id_orden.cast.text.ilike.%${searchTerm}%`);
+                if (!isNaN(Number(searchTerm))) {
+                    query = query.eq('id_orden', Number(searchTerm));
+                } else {
+                    query = query.or(`cliente_nombre.ilike.%${searchTerm}%,cliente_apellido.ilike.%${searchTerm}%,cliente_calle.ilike.%${searchTerm}%`);
+                }
             }
 
             const { data, count, error } = await query

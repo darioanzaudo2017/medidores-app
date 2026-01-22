@@ -219,9 +219,9 @@ const OrderExecution: React.FC = () => {
 
             if (dbError) throw dbError;
             setPhotos(prev => [...prev, newPhoto]);
-        } catch (err) {
+        } catch (err: any) {
             console.error('Error uploading file:', err);
-            alert('Error al subir la imagen');
+            alert(`Error al subir la imagen: ${err.message || 'Error desconocido'}. Verifique su conexión y que el archivo sea una imagen válida.`);
         } finally {
             setSaving(false);
         }
