@@ -77,10 +77,11 @@ const AgentDashboard: React.FC = () => {
             }
 
             if (searchTerm) {
-                if (!isNaN(Number(searchTerm))) {
+                const term = `%${searchTerm.trim()}%`;
+                if (!isNaN(Number(searchTerm)) && searchTerm.trim() !== '') {
                     query = query.eq('id_orden', Number(searchTerm));
                 } else {
-                    query = query.or(`cliente_nombre.ilike.%${searchTerm}%,cliente_apellido.ilike.%${searchTerm}%,cliente_calle.ilike.%${searchTerm}%`);
+                    query = query.or(`cliente_nombre.ilike."${term}",cliente_apellido.ilike."${term}",cliente_calle.ilike."${term}"`);
                 }
             }
 
@@ -215,7 +216,7 @@ const AgentDashboard: React.FC = () => {
                 </div>
 
                 {/* Mobile View: Cards */}
-                <div className="md:hidden divide-y divide-gray-50">
+                <div className="md:hidden divide-y divide-gray-50 pb-20">
                     {loading ? (
                         [...Array(3)].map((_, i) => (
                             <div key={i} className="p-4 animate-pulse space-y-3">

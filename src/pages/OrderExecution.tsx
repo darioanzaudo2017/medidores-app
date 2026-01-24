@@ -57,8 +57,10 @@ interface OrderData {
     regulador: string;
     flexible: string;
     observaciones_agente: string;
-    diferencialectura: number;
     fimardigital: string;
+    id_estado_orden: string;
+    latcambio: string;
+    longcambio: string;
 }
 
 interface MotivoCierre {
@@ -193,7 +195,7 @@ const OrderExecution: React.FC = () => {
         const file = e.target.files[0];
         const fileExt = file.name.split('.').pop();
         const fileName = `${id}_${Date.now()}.${fileExt}`;
-        const filePath = `fotos/${fileName}`;
+        const filePath = `foto/${fileName}`;
 
         try {
             setSaving(true);
@@ -229,59 +231,97 @@ const OrderExecution: React.FC = () => {
 
     const suggestClosureMotive = (ord: OrderData | null): number | null => {
         if (!ord) return null;
+
+        // Orden estricto según flujograma
         if (ord.morador === 'NO') return 1;
         if (ord.cliente_accede_cambio === 'NO') return 2;
+        if (ord.coincidenummedidor === 'NO') return 9;
         if (ord.medidor_mal_estado === 'SI') return 3;
         if (ord.posee_reja_soldadura === 'SI' && ord.puede_retirar === 'NO') return 7;
+        if (ord.fuga_fuera_zona === 'SI') return 4;
         if (ord.operar_valvula === 'NO') return 5;
         if (ord.continua_perdida_valvula === 'SI') return 6;
-        if (ord.fuga_fuera_zona === 'SI' && ord.perdida_valvula === 'NO') return 4;
         if (ord.medidor_nuevo && ord.lectura_nueva > 0) return 8;
+
         return null;
+    };
+
+    const getCurrentLocation = (): Promise<{ lat: number; lng: number } | null> => {
+        return new Promise((resolve) => {
+            if (!navigator.geolocation) {
+                resolve(null);
+                return;
+            }
+            navigator.geolocation.getCurrentPosition(
+                (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+                () => resolve(null),
+                { enableHighAccuracy: true, timeout: 5000 }
+            );
+        });
     };
 
     const finalizeOrder = async () => {
         const suggested = suggestClosureMotive(order);
         const selectedMotive = order?.motivo_de_cierre || suggested;
 
+        // Validación 1: Debe existir un motivo
         if (!selectedMotive) {
-            alert('Por favor selecciona un motivo de cierre');
+            alert('Por favor completa la inspección o selecciona un motivo de cierre');
             return;
         }
 
-        // Validación según feedback del usuario: si es primera visita sin morador (ID 1), requiere fecha segunda visita
+        // Validación 2: Si es primera visita sin morador, requiere fecha
         if (selectedMotive === 1 && !order?.fecha_segunda_visita) {
             alert('Debe establecer una fecha de segunda visita para este motivo');
             return;
         }
 
+        // Validación 3: Sugerir observaciones para cierres con problemas
+        if (selectedMotive !== 8 && (!order?.observaciones_agente || order.observaciones_agente.trim() === '')) {
+            const confirmar = window.confirm(
+                '⚠️ No has agregado observaciones. Para cierres con problemas es recomendable dejar un comentario. ¿Deseas continuar sin observaciones?'
+            );
+            if (!confirmar) return;
+        }
+
         try {
             setSaving(true);
 
+            // Capturar ubicación actual
+            const location = await getCurrentLocation();
+
             let signatureUrl = order?.fimardigital;
-            if (canvasRef.current) {
-                const canvas = canvasRef.current;
-                const signatureData = canvas.toDataURL('image/png');
-                if (signatureData.length > 2000) {
+
+            // Solo requerir firma si NO es primera visita sin morador
+            if (selectedMotive !== 1) {
+                if (canvasRef.current) {
+                    const canvas = canvasRef.current;
+                    const signatureData = canvas.toDataURL('image/png');
+
+                    // Validación 4: Debe existir firma
+                    if (signatureData.length < 2000) {
+                        alert('Por favor, solicita la firma del titular antes de finalizar');
+                        return;
+                    }
+
                     const blob = await (await fetch(signatureData)).blob();
                     const fileName = `firma_${id}_${Date.now()}.png`;
                     const { error: uploadError } = await supabase.storage
                         .from('fotomedidor')
-                        .upload(`firmas/${fileName}`, blob);
+                        .upload(`firma/${fileName}`, blob);
 
                     if (!uploadError) {
                         const { data: { publicUrl } } = supabase.storage
                             .from('fotomedidor')
-                            .getPublicUrl(`firmas/${fileName}`);
+                            .getPublicUrl(`firma/${fileName}`);
                         signatureUrl = publicUrl;
                     }
                 }
             }
 
-            // Si el motivo es 1 (Sin morador), mantenemos el estado como "ASIGNADO" o el estado actual de ejecución
-            // Si no, lo pasamos a "CERRADO AGENTE"
+            // Determinar estado final según motivo
             const nuevoEstado = selectedMotive === 1
-                ? '60804b07-3287-45b4-b4f2-622884f519d2' // Ejecucion
+                ? order?.id_estado_orden // Mantener estado actual si es primera visita
                 : 'b28d55bb-f885-4cfa-a181-88c1d80ac118'; // Cerrado Agente
 
             const { error } = await supabase
@@ -291,14 +331,27 @@ const OrderExecution: React.FC = () => {
                     paso_actual: 4,
                     fecha_primera_visita: order?.fecha_primera_visita || new Date().toISOString(),
                     motivo_de_cierre: selectedMotive,
-                    fimardigital: signatureUrl
+                    fimardigital: signatureUrl,
+                    ...(selectedMotive === 1 && {
+                        fecha_segunda_visita: order?.fecha_segunda_visita
+                    }),
+                    latcambio: location?.lat?.toString() || order?.latcambio,
+                    longcambio: location?.lng?.toString() || order?.longcambio
                 })
                 .eq('id_orden', id);
 
             if (error) throw error;
+
+            // Mensaje de éxito diferenciado
+            if (selectedMotive === 1) {
+                alert('✅ Primera visita registrada. Se programó segunda visita para: ' +
+                    new Date(order?.fecha_segunda_visita!).toLocaleDateString());
+            }
+
             navigate('/agente/dashboard');
         } catch (err) {
             console.error('Error finalizing order:', err);
+            alert('Error al finalizar la orden. Por favor intenta nuevamente.');
         } finally {
             setSaving(false);
         }
@@ -402,17 +455,17 @@ const OrderExecution: React.FC = () => {
             </div>
 
             {/* Content */}
-            <main className="flex-1 p-4 md:p-8">
+            <main className="flex-1 p-4 md:p-8 pb-32">
                 <div className="max-w-3xl mx-auto">
                     {step === 1 && <SummaryStep order={order} />}
-                    {step === 2 && <InspectionStep order={order} onUpdate={updateField} readOnly={isClosed} />}
+                    {step === 2 && <InspectionStep order={order} onUpdate={updateField} readOnly={isClosed} suggestClosureMotive={suggestClosureMotive} />}
                     {step === 3 && <WorkStep order={order} onUpdate={updateField} lecturaRetirado={lecturaRetirado} setLecturaRetirado={setLecturaRetirado} photos={photos} handleFileUpload={handleFileUpload} readOnly={isClosed} />}
                     {step === 4 && <ClosingStep order={order} motivos={motivos} onUpdate={updateField} suggested={suggestClosureMotive(order)} canvasRef={canvasRef} startDrawing={startDrawing} stopDrawing={stopDrawing} draw={draw} clearSignature={clearSignature} readOnly={isClosed} />}
                 </div>
             </main>
 
             {/* Footer */}
-            <footer className="bg-white border-t border-gray-100 p-4 sticky bottom-0 z-20 pb-safe">
+            <footer className="bg-white border-t border-gray-100 p-4 sticky bottom-0 z-20 pb-safe shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
                 <div className="max-w-3xl mx-auto flex items-center justify-between gap-4">
                     <button onClick={() => setStep(s => Math.max(1, s - 1))} disabled={step === 1 || saving} className="flex-1 py-4 rounded-2xl font-black text-xs uppercase bg-gray-100 text-gray-500 disabled:opacity-30">Anterior</button>
                     {isClosed ? (
@@ -452,20 +505,34 @@ const SummaryStep = ({ order }: { order: OrderData }) => (
     </div>
 );
 
-const InspectionStep = ({ order, onUpdate, readOnly }: { order: OrderData, onUpdate: (f: string, v: string) => void, readOnly?: boolean }) => {
+const InspectionStep = ({ order, onUpdate, readOnly, suggestClosureMotive }: { order: OrderData, onUpdate: (f: string, v: string) => void, readOnly?: boolean, suggestClosureMotive: (ord: OrderData | null) => number | null }) => {
     const shouldShow = (field: string): boolean => {
         switch (field) {
-            case 'morador': return true;
-            case 'cliente_accede_cambio': return order.morador === 'SI';
-            case 'coincidenummedidor': return order.cliente_accede_cambio === 'SI';
-            case 'medidor_mal_estado': return order.cliente_accede_cambio === 'SI';
-            case 'posee_reja_soldadura': return order.medidor_mal_estado === 'NO';
-            case 'puede_retirar': return order.posee_reja_soldadura === 'SI';
-            case 'fuga_fuera_zona': return order.medidor_mal_estado === 'NO';
-            case 'perdida_valvula': return order.medidor_mal_estado === 'NO';
-            case 'operar_valvula': return order.medidor_mal_estado === 'NO' && (order.puede_retirar === 'SI' || order.posee_reja_soldadura === 'NO');
-            case 'continua_perdida_valvula': return order.operar_valvula === 'SI';
-            default: return false;
+            case 'morador':
+                return true;
+            case 'cliente_accede_cambio':
+                return order.morador === 'SI';
+            case 'coincidenummedidor':
+                return order.morador === 'SI' && order.cliente_accede_cambio === 'SI';
+            case 'medidor_mal_estado':
+                return order.morador === 'SI' &&
+                    order.cliente_accede_cambio === 'SI' &&
+                    order.coincidenummedidor === 'SI';
+            case 'posee_reja_soldadura':
+                return order.medidor_mal_estado === 'NO';
+            case 'puede_retirar':
+                return order.posee_reja_soldadura === 'SI';
+            case 'fuga_fuera_zona':
+                return order.medidor_mal_estado === 'NO' &&
+                    (order.posee_reja_soldadura === 'NO' || order.puede_retirar === 'SI');
+            case 'perdida_valvula':
+                return order.fuga_fuera_zona === 'NO';
+            case 'operar_valvula':
+                return order.fuga_fuera_zona === 'NO' && order.perdida_valvula === 'NO';
+            case 'continua_perdida_valvula':
+                return order.operar_valvula === 'SI';
+            default:
+                return false;
         }
     };
 
@@ -482,12 +549,54 @@ const InspectionStep = ({ order, onUpdate, readOnly }: { order: OrderData, onUpd
         { field: 'continua_perdida_valvula', label: '¿Se detectan perdidas luego de operar válvula?' },
     ];
 
+    const totalVisibleQuestions = checklistItems.filter(item => shouldShow(item.field)).length;
+    const answeredQuestions = checklistItems.filter(item =>
+        shouldShow(item.field) &&
+        (order as any)[item.field] !== null &&
+        (order as any)[item.field] !== undefined &&
+        (order as any)[item.field] !== ''
+    ).length;
+
     return (
         <div className="bg-white rounded-3xl p-6 shadow-xl shadow-black/5 border border-gray-50 space-y-6 text-left animate-in slide-in-from-bottom-4">
-            <div className="flex items-center space-x-3 border-b border-gray-50 pb-4">
-                <div className="p-2 bg-blue-50 rounded-lg"><MapPin className="w-5 h-5 text-blue-600" /></div>
-                <h2 className="text-sm font-black uppercase tracking-widest text-gray-400">Inicio de Visita</h2>
+            <div className="flex items-center justify-between border-b border-gray-50 pb-4">
+                <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-blue-50 rounded-lg"><MapPin className="w-5 h-5 text-blue-600" /></div>
+                    <h2 className="text-sm font-black uppercase tracking-widest text-gray-400">Inicio de Visita</h2>
+                </div>
+
+                {/* Indicador de progreso */}
+                <div className="flex items-center space-x-2">
+                    <span className="text-[10px] font-black text-gray-400 uppercase">
+                        {answeredQuestions}/{totalVisibleQuestions}
+                    </span>
+                    <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                        <div
+                            className="h-full bg-blue-600 transition-all duration-500"
+                            style={{ width: `${(answeredQuestions / totalVisibleQuestions) * 100}%` }}
+                        />
+                    </div>
+                </div>
             </div>
+
+            {/* Alerta si se detecta motivo de cierre (Step 4) */}
+            {suggestClosureMotive(order) && suggestClosureMotive(order) !== 8 && (
+                <div className="p-4 bg-yellow-50 border-l-4 border-yellow-400 rounded-xl animate-in slide-in-from-top-2">
+                    <div className="flex items-start space-x-3">
+                        <div className="p-1 bg-yellow-400 rounded-lg">
+                            <CheckCircle2 className="w-4 h-4 text-white" />
+                        </div>
+                        <div className="flex-1">
+                            <p className="text-[10px] font-black text-yellow-800 uppercase tracking-widest">
+                                Inspección Completada
+                            </p>
+                            <p className="text-[11px] text-yellow-700 font-medium mt-1">
+                                Se detectó un motivo de cierre. Al presionar "Siguiente" se saltará directo al paso de Cierre.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
             <div className="space-y-5">
                 {checklistItems.map((item) => shouldShow(item.field) && (
                     <div key={item.field} className="space-y-3 animate-in fade-in slide-in-from-left-2 duration-300">
@@ -650,15 +759,22 @@ const ClosingStep = ({ order, motivos, onUpdate, suggested, canvasRef, startDraw
                             onClick={() => onUpdate('motivo_de_cierre', m.id)}
                             className={cn(
                                 "w-full text-left p-4 rounded-2xl border transition-all text-xs font-bold",
-                                order.motivo_de_cierre === m.id ? "bg-blue-600 border-blue-600 text-white shadow-lg" :
-                                    m.id === suggested && !order.motivo_de_cierre ? "bg-yellow-50 border-yellow-200 text-gray-700" :
-                                        "bg-gray-50 border-transparent text-gray-600 hover:bg-gray-100",
+                                order.motivo_de_cierre === m.id
+                                    ? "bg-blue-600 border-blue-600 text-white shadow-lg"
+                                    : m.id === suggested && !order.motivo_de_cierre
+                                        ? "bg-yellow-50 border-yellow-200 text-gray-700 shadow-md"
+                                        : "bg-gray-50 border-transparent text-gray-600 hover:bg-gray-100",
                                 readOnly && "opacity-80"
                             )}
                         >
                             <div className="flex items-center justify-between">
                                 <span>{m.Motivo}</span>
                                 {order.motivo_de_cierre === m.id && <Check className="w-4 h-4" />}
+                                {m.id === suggested && !order.motivo_de_cierre && (
+                                    <span className="text-[9px] font-black uppercase tracking-widest text-yellow-600">
+                                        Sugerido
+                                    </span>
+                                )}
                             </div>
                         </button>
                     ))}
