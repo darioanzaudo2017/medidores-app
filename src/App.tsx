@@ -10,6 +10,7 @@ import { VerificationQueue } from './pages/VerificationQueue'
 import { OrderDetail } from './pages/OrderDetail'
 import AgentDashboard from './pages/AgentDashboard'
 import OrderExecution from './pages/OrderExecution'
+import AdminDashboard from './pages/AdminDashboard'
 
 // Placeholder components
 const Dashboard = () => (
@@ -35,6 +36,7 @@ const SettingsPage = () => <div className="p-8 text-left"><h1 className="text-2x
 function App() {
   const setSession = useAuthStore(state => state.setSession)
   const session = useAuthStore(state => state.session)
+  const role = useAuthStore(state => state.role)
   const isLoading = useAuthStore(state => state.isLoading)
 
   useEffect(() => {
@@ -59,6 +61,12 @@ function App() {
     )
   }
 
+  const renderDashboard = () => {
+    if (role?.toLowerCase() === 'superadmin') return <AdminDashboard />
+    if (role?.toLowerCase() === 'agente') return <AgentDashboard />
+    return <Dashboard />
+  }
+
   return (
     <Router>
       <Routes>
@@ -66,11 +74,12 @@ function App() {
 
         <Route path="/" element={session ? <MainLayout /> : <Navigate to="/login" />}>
 
-          <Route index element={<Dashboard />} />
+          <Route index element={renderDashboard()} />
           <Route path="ordenes" element={<Orders />} />
           <Route path="ordenes/:id" element={<OrderDetail />} />
           <Route path="verificacion" element={<VerificationQueue />} />
           <Route path="agente/dashboard" element={<AgentDashboard />} />
+          <Route path="admin/dashboard" element={<AdminDashboard />} />
           <Route path="orden/:id/ejecutar" element={<OrderExecution />} />
           <Route path="clientes" element={<Clients />} />
           <Route path="usuarios" element={<Users />} />
