@@ -188,9 +188,36 @@ const OrderExecution: React.FC = () => {
     };
 
     const updateProgress = async (nextStep: number) => {
-        if (!id) return;
-        setStep(nextStep);
-        updateField('paso_actual', nextStep, true);
+        if (!id || !order) return;
+
+        let targetStep = nextStep;
+        const suggested = suggestClosureMotive(order);
+
+        // Si detectamos un motivo de cierre en el paso 2, saltamos directo al paso 4
+        if (step === 2 && nextStep === 3 && suggested && suggested !== 8) {
+            targetStep = 4;
+            // Auto-asignamos el motivo si no está seteado
+            if (!order.motivo_de_cierre) {
+                updateField('motivo_de_cierre', suggested, true);
+            }
+        }
+
+        setStep(targetStep);
+        updateField('paso_actual', targetStep, true);
+    };
+
+    const handlePrevious = () => {
+        if (!order || step === 1) return;
+
+        let targetStep = step - 1;
+        const suggested = suggestClosureMotive(order);
+
+        // Si estamos en el paso 4 y el paso 3 fue saltado por un motivo de cierre, volvemos directo al 2
+        if (step === 4 && suggested && suggested !== 8) {
+            targetStep = 2;
+        }
+
+        setStep(targetStep);
     };
 
     const finalizeOrder = async () => {
@@ -307,13 +334,30 @@ const OrderExecution: React.FC = () => {
 
         try {
             setSaving(true);
-            const fileExt = file.name.split('.').pop();
+
+            // Validation: Max size (50MB videos, 10MB images)
+            const maxSize = isVideo ? 50 * 1024 * 1024 : 10 * 1024 * 1024;
+            if (file.size > maxSize) {
+                throw new Error(`El archivo es muy pesado (${(file.size / 1024 / 1024).toFixed(1)}MB). Máximo permitido: ${isVideo ? '50MB' : '10MB'}.`);
+            }
+
+            // Dynamic extension based on file type if name is generic (common on mobile)
+            let fileExt = file.name.split('.').pop();
+            if (fileExt === file.name || !fileExt) {
+                fileExt = isVideo ? 'mp4' : 'jpg';
+            }
+
             const fileName = `${id}_${Date.now()}.${fileExt}`;
             const filePath = `${fileName}`;
 
+            // Explicitly set contentType for better PWA/Mobile compatibility
             const { error: uploadError } = await supabase.storage
                 .from('fotomedidor')
-                .upload(filePath, file);
+                .upload(filePath, file, {
+                    contentType: file.type,
+                    cacheControl: '3600',
+                    upsert: false
+                });
 
             if (uploadError) throw uploadError;
 
@@ -324,7 +368,7 @@ const OrderExecution: React.FC = () => {
             const { data: newPhoto, error: dbError } = await supabase
                 .from('t_fotos')
                 .insert({
-                    orden_id: id,
+                    orden_id: parseInt(id!),
                     url_foto: urlData.publicUrl,
                     video: isVideo
                 })
@@ -333,12 +377,12 @@ const OrderExecution: React.FC = () => {
 
             if (dbError) throw dbError;
             setPhotos(prev => [...prev, newPhoto as DBPhoto]);
-        } catch (err: unknown) {
-            const error = err as Error;
-            console.error('Error uploading file:', error);
+        } catch (err: any) {
+            console.error('Error uploading file:', err);
+            const errorMessage = err.message || err.error_description || 'Error desconocido';
             toast.error(
                 `Error al subir ${isVideo ? 'video' : 'archivo'}`,
-                `${error.message || 'Error desconocido'}. Verifique su conexión.`
+                `${errorMessage}. Verificá tu conexión o intentá con un archivo más liviano.`
             );
         } finally {
             setSaving(false);
@@ -508,7 +552,7 @@ const OrderExecution: React.FC = () => {
             {/* Footer */}
             <footer className="bg-white border-t border-gray-100 p-4 sticky bottom-0 z-20 pb-safe shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
                 <div className="max-w-3xl mx-auto flex items-center justify-between gap-4">
-                    <button onClick={() => setStep(s => Math.max(1, s - 1))} disabled={step === 1 || saving} className="flex-1 py-4 rounded-2xl font-black text-xs uppercase bg-gray-100 text-gray-500 disabled:opacity-30">Anterior</button>
+                    <button onClick={handlePrevious} disabled={step === 1 || saving} className="flex-1 py-4 rounded-2xl font-black text-xs uppercase bg-gray-100 text-gray-500 disabled:opacity-30">Anterior</button>
                     {isClosed ? (
                         <button onClick={() => step < 4 ? setStep(step + 1) : navigate('/agente/dashboard')} className="flex-1 py-4 rounded-2xl font-black text-xs uppercase bg-gray-900 text-white shadow-xl flex items-center justify-center space-x-2">
                             <span>{step === 4 ? 'Volver al Dashboard' : 'Siguiente'}</span>
