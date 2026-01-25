@@ -58,8 +58,6 @@ export const MainLayout = () => {
 
     const menuItems = [
         { icon: LayoutDashboard, label: 'Panel', href: '/', roles: ['Superadmin', 'Supervisor', 'Agente'] },
-        { icon: LayoutDashboard, label: 'Dashboard Admin', href: '/admin/dashboard', roles: ['Superadmin'] },
-        { icon: ClipboardList, label: 'Mis Tareas', href: '/agente/dashboard', roles: ['Agente'] },
         { icon: ClipboardList, label: 'Órdenes', href: '/ordenes', roles: ['Superadmin', 'Supervisor'] },
         { icon: CheckCircle, label: 'Verificación', href: '/verificacion', roles: ['Superadmin', 'Supervisor'] },
         { icon: UserCircle, label: 'Clientes', href: '/clientes', roles: ['Superadmin', 'Supervisor'] },
