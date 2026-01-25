@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import {
     Search,
@@ -14,6 +14,8 @@ import {
     MoreHorizontal
 } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { useToast } from '../hooks/useToast';
+import { useAuthStore } from '../store/useAuthStore';
 
 interface UserRole {
     usuario_id: string;
@@ -25,7 +27,20 @@ interface UserRole {
     legajo?: string;
 }
 
+interface DBUser {
+    id: string;
+    nombre: string;
+    apellido: string;
+    email: string;
+    telefono: string;
+    legajo: string;
+    activo: boolean;
+    t_tipos_usuario: { nombre: string } | null;
+}
+
 export const Users = () => {
+    const toast = useToast();
+    const currentUserRole = useAuthStore(state => state.role);
     const [users, setUsers] = useState<UserRole[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
@@ -36,11 +51,9 @@ export const Users = () => {
         systemLoad: 24 // Placeholder from template
     });
 
-    const fetchUsers = async () => {
+    const fetchUsers = useCallback(async () => {
         setLoading(true);
         try {
-            // We use the view vt_usuarios_roles which also should include legajo if we updated it, 
-            // but let's check t_usuarios join to be safe and get all fields.
             const { data, error } = await supabase
                 .from('t_usuarios')
                 .select(`
@@ -57,7 +70,7 @@ export const Users = () => {
 
             if (error) throw error;
 
-            const formattedUsers: UserRole[] = (data as any[]).map(u => ({
+            const formattedUsers: UserRole[] = (data as unknown as DBUser[]).map(u => ({
                 usuario_id: u.id,
                 nombre_usuario: `${u.nombre} ${u.apellido}`,
                 email: u.email,
@@ -81,9 +94,14 @@ export const Users = () => {
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
 
     const toggleUserStatus = async (userId: string, currentStatus: boolean) => {
+        if (currentUserRole?.toUpperCase() !== 'SUPERADMIN' && currentUserRole?.toUpperCase() !== 'ADMIN') {
+            toast.error('Acceso Denegado', 'Solo los administradores pueden activar/desactivar usuarios.');
+            return;
+        }
+
         try {
             const { error } = await supabase
                 .from('t_usuarios')
@@ -92,18 +110,24 @@ export const Users = () => {
 
             if (error) throw error;
 
-            // Update local state
             setUsers(prev => prev.map(u =>
                 u.usuario_id === userId ? { ...u, activo: !currentStatus } : u
             ));
-        } catch (err) {
-            console.error('Error toggling status:', err);
+
+            toast.success(
+                currentStatus ? 'Usuario Desactivado' : 'Usuario Activado',
+                `El estado del usuario ha sido actualizado correctamente.`
+            );
+        } catch (err: unknown) {
+            const error = err as Error;
+            console.error('Error toggling status:', error);
+            toast.error('Error al actualizar', error.message || 'No se pudo cambiar el estado del usuario');
         }
     };
 
     useEffect(() => {
         fetchUsers();
-    }, []);
+    }, [fetchUsers]);
 
     const filteredUsers = users.filter(u =>
         u.nombre_usuario.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -123,11 +147,17 @@ export const Users = () => {
                     </p>
                 </div>
                 <div className="flex items-center gap-3">
-                    <button className="flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-[#2d3238] border border-[#dde3e4] dark:border-white/10 rounded-xl font-bold text-sm hover:bg-gray-50 dark:hover:bg-white/5 transition-all">
+                    <button
+                        onClick={() => toast.info('Exportación', 'La exportación a CSV estará disponible próximamente.')}
+                        className="flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-[#2d3238] border border-[#dde3e4] dark:border-white/10 rounded-xl font-bold text-sm hover:bg-gray-50 dark:hover:bg-white/5 transition-all"
+                    >
                         <Download className="w-5 h-5" />
                         Export CSV
                     </button>
-                    <button className="flex items-center gap-2 px-6 py-2.5 bg-primary text-white rounded-xl font-bold text-sm hover:bg-primary/90 shadow-lg shadow-primary/20 transition-all">
+                    <button
+                        onClick={() => toast.info('Nuevo Usuario', 'El formulario para crear nuevos usuarios está en desarrollo.')}
+                        className="flex items-center gap-2 px-6 py-2.5 bg-primary text-white rounded-xl font-bold text-sm hover:bg-primary/90 shadow-lg shadow-primary/20 transition-all"
+                    >
                         <UserPlus className="w-5 h-5" />
                         Add User
                     </button>
@@ -171,7 +201,69 @@ export const Users = () => {
 
             {/* Data Table Container */}
             <div className="bg-white dark:bg-[#2d3238] border border-[#dde2e4] dark:border-white/10 rounded-2xl shadow-sm overflow-hidden">
-                <div className="overflow-x-auto custom-scrollbar">
+                {/* Mobile View: Cards */}
+                <div className="md:hidden divide-y divide-[#dde2e4] dark:divide-white/10">
+                    {loading ? (
+                        [...Array(5)].map((_, i) => (
+                            <div key={i} className="p-4 animate-pulse space-y-3">
+                                <div className="flex items-center gap-3">
+                                    <div className="size-10 rounded-full bg-gray-100 dark:bg-white/5"></div>
+                                    <div className="h-4 bg-gray-100 dark:bg-white/5 rounded w-1/2"></div>
+                                </div>
+                                <div className="h-4 bg-gray-100 dark:bg-white/5 rounded w-full"></div>
+                                <div className="h-4 bg-gray-100 dark:bg-white/5 rounded w-full"></div>
+                            </div>
+                        ))
+                    ) : filteredUsers.length === 0 ? (
+                        <div className="p-12 text-center text-gray-500">No matching users found.</div>
+                    ) : (
+                        filteredUsers.map((user) => (
+                            <div key={user.usuario_id} className="p-4 space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <div className={cn(
+                                            "size-10 rounded-full flex items-center justify-center font-bold text-xs",
+                                            user.rol.toUpperCase() === 'SUPERADMIN' ? "bg-[#C06BE1]/20 text-[#C06BE1]" :
+                                                user.rol.toUpperCase() === 'SUPERVISOR' ? "bg-[#CCE16B]/20 text-[#CCE16B]" :
+                                                    "bg-primary/20 text-primary"
+                                        )}>
+                                            {user.nombre_usuario.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
+                                        </div>
+                                        <div>
+                                            <p className="font-bold text-[#121617] dark:text-white capitalize">{user.nombre_usuario}</p>
+                                            <p className="text-xs text-[#688182] dark:text-gray-400">{user.email}</p>
+                                        </div>
+                                    </div>
+                                    <RoleBadge role={user.rol} />
+                                </div>
+
+                                <div className="flex items-center justify-between bg-[#f1f4f4] dark:bg-white/5 p-3 rounded-xl">
+                                    <div className="space-y-1">
+                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none">Status</p>
+                                        <p className="text-xs font-bold text-[#121617] dark:text-white uppercase">{user.activo ? 'Active' : 'Inactive'}</p>
+                                    </div>
+                                    <label className="relative inline-flex items-center cursor-pointer">
+                                        <input
+                                            checked={user.activo}
+                                            onChange={() => toggleUserStatus(user.usuario_id, user.activo)}
+                                            className="sr-only peer"
+                                            type="checkbox"
+                                        />
+                                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-white/10 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-[#3D9B3D]"></div>
+                                    </label>
+                                </div>
+
+                                <div className="flex items-center justify-between text-xs font-medium text-[#688182]">
+                                    <span>Legajo: {user.legajo || 'N/A'}</span>
+                                    <span>{user.telefono || 'No phone'}</span>
+                                </div>
+                            </div>
+                        ))
+                    )}
+                </div>
+
+                {/* Data Table Container - Hidden on Mobile */}
+                <div className="hidden md:block overflow-x-auto custom-scrollbar">
                     <table className="w-full text-left border-collapse min-w-[1000px]">
                         <thead>
                             <tr className="bg-gray-50 dark:bg-white/2 border-b border-[#dde2e4] dark:border-white/10">
@@ -236,7 +328,7 @@ export const Users = () => {
                                             </label>
                                         </td>
                                         <td className="px-6 py-5 text-right">
-                                            <button className="p-2 hover:bg-gray-200 dark:hover:bg-white/10 rounded-xl text-gray-400 transition-colors">
+                                            <button className="p-2 hover:bg-gray-200 dark:hover:bg-white/10 rounded-xl text-gray-400 transition-all">
                                                 <MoreHorizontal className="w-5 h-5" />
                                             </button>
                                         </td>
@@ -297,7 +389,7 @@ export const Users = () => {
 
 const RoleBadge = ({ role = '' }: { role?: string }) => {
     const r = role?.toUpperCase();
-    const styleMap: any = {
+    const styleMap: Record<string, string> = {
         'AGENT': 'bg-[#6BB0E1]/15 text-[#6BB0E1] border-[#6BB0E1]/20',
         'AGENTE': 'bg-[#6BB0E1]/15 text-[#6BB0E1] border-[#6BB0E1]/20',
         'SUPERVISOR': 'bg-[#CCE16B]/15 text-[#CCE16B] border-[#CCE16B]/30',
@@ -316,7 +408,7 @@ const RoleBadge = ({ role = '' }: { role?: string }) => {
     );
 };
 
-const Activity = (props: any) => (
+const Activity = (props: React.SVGProps<SVGSVGElement>) => (
     <svg
         {...props}
         xmlns="http://www.w3.org/2000/svg"

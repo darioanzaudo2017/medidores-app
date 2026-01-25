@@ -56,6 +56,35 @@
 
   body {
     @apply bg-background-light dark:bg-background-dark font-display;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior-y: none;
+  }
+
+  /* Handle safe area for notched devices */
+  .safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* Disable selection on UI elements */
+  button,
+  nav,
+  .no-select {
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* Better scrollbar for desktop but thin/hidden for mobile */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
   }
 }
 

@@ -29,7 +29,7 @@ const Dashboard = () => (
   </div>
 )
 
-const Clients = () => <div className="p-8 text-left"><h1 className="text-2xl font-bold">Clientes (Próximamente)</h1></div>
+import { Clients } from './pages/Clients'
 const MapView = () => <div className="p-8 text-left"><h1 className="text-2xl font-bold">Mapa Real-time (Próximamente)</h1></div>
 const SettingsPage = () => <div className="p-8 text-left"><h1 className="text-2xl font-bold">Configuración (Próximamente)</h1></div>
 

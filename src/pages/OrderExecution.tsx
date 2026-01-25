@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import {
@@ -8,19 +8,21 @@ import {
     Camera,
     FileText,
     MapPin,
-    Save,
     Loader2,
     User,
     Hash,
-    Check,
-    Plus,
     PenTool,
     MessageSquare,
     QrCode,
     Eraser,
-    Calendar
+    Wrench,
+    Video,
+    Play,
+    X,
+    AlertTriangle
 } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { useToast } from '../hooks/useToast';
 
 interface OrderData {
     id_orden: number;
@@ -58,9 +60,12 @@ interface OrderData {
     flexible: string;
     observaciones_agente: string;
     fimardigital: string;
+    longcambio: string;
     id_estado_orden: string;
     latcambio: string;
-    longcambio: string;
+    observacion_verificacion: string;
+    diferencialectura: number;
+    fecha_finalizacion_agente: string;
 }
 
 interface MotivoCierre {
@@ -71,11 +76,13 @@ interface MotivoCierre {
 interface DBPhoto {
     id: string;
     url_foto: string;
+    video: boolean;
 }
 
 const OrderExecution: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
+    const toast = useToast();
     const [loading, setLoading] = useState(true);
     const [order, setOrder] = useState<OrderData | null>(null);
     const [motivos, setMotivos] = useState<MotivoCierre[]>([]);
@@ -87,14 +94,42 @@ const OrderExecution: React.FC = () => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [isDrawing, setIsDrawing] = useState(false);
 
-    const steps = [
-        { title: 'Resumen', icon: FileText },
-        { title: 'Inspección', icon: MapPin },
-        { title: 'Instalación', icon: Camera },
-        { title: 'Cierre', icon: CheckCircle2 },
-    ];
+    // Optimización de guardado: Debounce y Batching
+    const pendingUpdates = useRef<Record<string, unknown>>({});
+    const saveTimeoutRef = useRef<number | null>(null);
 
-    const fetchOrderDetails = async () => {
+    const savePendingUpdates = useCallback(async () => {
+        if (!id || Object.keys(pendingUpdates.current).length === 0) return;
+
+        try {
+            const { error } = await supabase
+                .from('t_ordenes')
+                .update(pendingUpdates.current)
+                .eq('id_orden', id);
+
+            if (error) throw error;
+            pendingUpdates.current = {};
+        } catch (err) {
+            console.error('Error in auto-save:', err);
+        }
+    }, [id]);
+
+    const updateField = (field: string, value: unknown, immediate = false) => {
+        if (!order) return;
+
+        setOrder(prev => prev ? ({ ...prev, [field]: value }) : null);
+        pendingUpdates.current[field] = value;
+
+        if (immediate) {
+            savePendingUpdates();
+        } else {
+            if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+            saveTimeoutRef.current = window.setTimeout(savePendingUpdates, 2000);
+        }
+    };
+
+    const fetchOrderDetails = useCallback(async () => {
+        if (!id) return;
         try {
             setLoading(true);
             const { data, error } = await supabase
@@ -123,89 +158,166 @@ const OrderExecution: React.FC = () => {
             // Photos
             const { data: photosData } = await supabase
                 .from('t_fotos')
-                .select('id, url_foto')
+                .select('id, url_foto, video')
                 .eq('orden_id', id);
-            if (photosData) setPhotos(photosData);
+            if (photosData) setPhotos(photosData as DBPhoto[]);
 
         } catch (err) {
             console.error('Error fetching order details:', err);
         } finally {
             setLoading(false);
         }
-    };
+    }, [id]);
 
     useEffect(() => {
         fetchOrderDetails();
-    }, [id]);
+    }, [fetchOrderDetails]);
 
     const isClosed = order?.estado_nombre === 'CERRADO AGENTE';
 
-    const updateField = async (field: string, value: any) => {
-        if (isClosed) return; // Bloquear edición si está cerrada
-        try {
-            setSaving(true);
-            const { error } = await supabase
-                .from('t_ordenes')
-                .update({ [field]: value })
-                .eq('id_orden', id);
-
-            if (error) throw error;
-            setOrder(prev => prev ? { ...prev, [field]: value } : null);
-        } catch (err) {
-            console.error('Error updating field:', err);
-        } finally {
-            setSaving(false);
-        }
+    const suggestClosureMotive = (ord: OrderData | null): number | null => {
+        if (!ord) return null;
+        if (ord.morador === 'NO') return 1;
+        if (ord.cliente_accede_cambio === 'NO') return 2;
+        if (ord.coincidenummedidor === 'NO') return 3;
+        if (ord.medidor_mal_estado === 'SI') return 4;
+        if (ord.posee_reja_soldadura === 'SI' && ord.puede_retirar === 'NO') return 5;
+        if (ord.fuga_fuera_zona === 'SI') return 6;
+        if (ord.perdida_valvula === 'SI') return 7;
+        return 8; // Normal
     };
 
     const updateProgress = async (nextStep: number) => {
-        let finalNextStep = nextStep;
+        if (!id) return;
+        setStep(nextStep);
+        updateField('paso_actual', nextStep, true);
+    };
 
-        // Lógica de salto: Al avanzar del paso 2 al 3, verificamos el motivo
-        if (step === 2 && nextStep === 3) {
-            const suggested = suggestClosureMotive(order);
-            // Si el motivo NO es 'Cambio de medidor completo' (ID 8), saltamos directamente al paso 4 (Cierre)
-            if (suggested && suggested !== 8) {
-                finalNextStep = 4;
+    const finalizeOrder = async () => {
+        if (!id || !order) return;
+
+        // Validaciones Finales
+        if (suggestClosureMotive(order) === 8) {
+            if (!order.medidor_nuevo || !order.lectura_nueva) {
+                toast.warning('Datos Incompletos', 'Debe ingresar el nuevo medidor y su lectura');
+                setStep(3);
+                return;
             }
+        } else {
+            if (!order.motivo_de_cierre) {
+                toast.warning('Falta Motivo', 'Debe seleccionar un motivo de cierre');
+                return;
+            }
+        }
+
+        if (photos.length < 2) {
+            toast.warning('Faltan Fotos', 'Debe subir al menos 2 evidencias (Fotos/Video)');
+            return;
+        }
+
+        const suggested = suggestClosureMotive(order);
+        const isFirstNoMorador = (order.motivo_de_cierre === 1 || (!order.motivo_de_cierre && suggested === 1));
+
+        if (!isFirstNoMorador && !order.fimardigital) {
+            const signature = canvasRef.current?.toDataURL();
+            if (!signature || signature.length < 1000) {
+                toast.warning('Firma Requerida', 'El titular debe firmar para finalizar el proceso');
+                return;
+            }
+            updateField('fimardigital', signature);
         }
 
         try {
             setSaving(true);
+            await savePendingUpdates();
+
+            // Status 'CERRADO AGENTE'
+            const { data: statusData } = await supabase
+                .from('t_estados')
+                .select('id')
+                .eq('nombre', 'CERRADO AGENTE')
+                .single();
+
+            if (!statusData) throw new Error('Estado CERRADO AGENTE no encontrado');
+
             const { error } = await supabase
                 .from('t_ordenes')
                 .update({
-                    paso_actual: finalNextStep,
-                    ...(step === 1 && { fecha_inicio_ejecucion: new Date().toISOString() }),
-                    id_estado_orden: '60804b07-3287-45b4-b4f2-622884f519d2'
+                    id_estado_orden: statusData.id,
+                    fecha_finalizacion_agente: new Date().toISOString()
                 })
                 .eq('id_orden', id);
 
             if (error) throw error;
-            setStep(finalNextStep);
-        } catch (err) {
-            console.error('Error updating progress:', err);
+
+            toast.success('Orden Finalizada', 'La orden ha sido enviada correctamente');
+            navigate('/agente/dashboard');
+        } catch (err: unknown) {
+            const error = err as Error;
+            console.error('Error finalizing:', error);
+            toast.error('Error al Finalizar', error.message);
         } finally {
             setSaving(false);
         }
     };
 
-    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (!e.target.files || e.target.files.length === 0) return;
-        const file = e.target.files[0];
-        const fileExt = file.name.split('.').pop();
-        const fileName = `${id}_${Date.now()}.${fileExt}`;
-        const filePath = `foto/${fileName}`;
+    // Signature Canvas logic
+    const startDrawing = (e: React.MouseEvent | React.TouchEvent) => {
+        setIsDrawing(true);
+        draw(e);
+    };
+
+    const stopDrawing = () => {
+        setIsDrawing(false);
+        if (canvasRef.current) {
+            updateField('fimardigital', canvasRef.current.toDataURL());
+        }
+    };
+
+    const draw = (e: React.MouseEvent | React.TouchEvent) => {
+        if (!isDrawing || !canvasRef.current) return;
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        const rect = canvas.getBoundingClientRect();
+        const clientX = 'touches' in e ? (e as React.TouchEvent).touches[0].clientX : (e as React.MouseEvent).clientX;
+        const clientY = 'touches' in e ? (e as React.TouchEvent).touches[0].clientY : (e as React.MouseEvent).clientY;
+
+        const x = (clientX - rect.left) * (canvas.width / rect.width);
+        const y = (clientY - rect.top) * (canvas.height / rect.height);
+
+        ctx.lineTo(x, y);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+    };
+
+    const clearSignature = () => {
+        if (canvasRef.current) {
+            const ctx = canvasRef.current.getContext('2d');
+            ctx?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+            updateField('fimardigital', '');
+        }
+    };
+
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, isVideo: boolean) => {
+        const file = e.target.files?.[0];
+        if (!file || !id) return;
 
         try {
             setSaving(true);
+            const fileExt = file.name.split('.').pop();
+            const fileName = `${id}_${Date.now()}.${fileExt}`;
+            const filePath = `${fileName}`;
+
             const { error: uploadError } = await supabase.storage
                 .from('fotomedidor')
                 .upload(filePath, file);
 
             if (uploadError) throw uploadError;
 
-            const { data: { publicUrl } } = supabase.storage
+            const { data: urlData } = supabase.storage
                 .from('fotomedidor')
                 .getPublicUrl(filePath);
 
@@ -213,202 +325,90 @@ const OrderExecution: React.FC = () => {
                 .from('t_fotos')
                 .insert({
                     orden_id: id,
-                    url_foto: publicUrl,
-                    video: false
+                    url_foto: urlData.publicUrl,
+                    video: isVideo
                 })
                 .select()
                 .single();
 
             if (dbError) throw dbError;
-            setPhotos(prev => [...prev, newPhoto]);
-        } catch (err: any) {
-            console.error('Error uploading file:', err);
-            alert(`Error al subir la imagen: ${err.message || 'Error desconocido'}. Verifique su conexión y que el archivo sea una imagen válida.`);
+            setPhotos(prev => [...prev, newPhoto as DBPhoto]);
+        } catch (err: unknown) {
+            const error = err as Error;
+            console.error('Error uploading file:', error);
+            toast.error(
+                `Error al subir ${isVideo ? 'video' : 'archivo'}`,
+                `${error.message || 'Error desconocido'}. Verifique su conexión.`
+            );
         } finally {
             setSaving(false);
         }
     };
 
-    const suggestClosureMotive = (ord: OrderData | null): number | null => {
-        if (!ord) return null;
-
-        // Orden estricto según flujograma
-        if (ord.morador === 'NO') return 1;
-        if (ord.cliente_accede_cambio === 'NO') return 2;
-        if (ord.coincidenummedidor === 'NO') return 9;
-        if (ord.medidor_mal_estado === 'SI') return 3;
-        if (ord.posee_reja_soldadura === 'SI' && ord.puede_retirar === 'NO') return 7;
-        if (ord.fuga_fuera_zona === 'SI') return 4;
-        if (ord.operar_valvula === 'NO') return 5;
-        if (ord.continua_perdida_valvula === 'SI') return 6;
-        if (ord.medidor_nuevo && ord.lectura_nueva > 0) return 8;
-
-        return null;
-    };
-
-    const getCurrentLocation = (): Promise<{ lat: number; lng: number } | null> => {
-        return new Promise((resolve) => {
-            if (!navigator.geolocation) {
-                resolve(null);
-                return;
-            }
-            navigator.geolocation.getCurrentPosition(
-                (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-                () => resolve(null),
-                { enableHighAccuracy: true, timeout: 5000 }
-            );
-        });
-    };
-
-    const finalizeOrder = async () => {
-        const suggested = suggestClosureMotive(order);
-        const selectedMotive = order?.motivo_de_cierre || suggested;
-
-        // Validación 1: Debe existir un motivo
-        if (!selectedMotive) {
-            alert('Por favor completa la inspección o selecciona un motivo de cierre');
-            return;
-        }
-
-        // Validación 2: Si es primera visita sin morador, requiere fecha
-        if (selectedMotive === 1 && !order?.fecha_segunda_visita) {
-            alert('Debe establecer una fecha de segunda visita para este motivo');
-            return;
-        }
-
-        // Validación 3: Sugerir observaciones para cierres con problemas
-        if (selectedMotive !== 8 && (!order?.observaciones_agente || order.observaciones_agente.trim() === '')) {
-            const confirmar = window.confirm(
-                '⚠️ No has agregado observaciones. Para cierres con problemas es recomendable dejar un comentario. ¿Deseas continuar sin observaciones?'
-            );
-            if (!confirmar) return;
-        }
+    const handleDeleteFile = async (photo: DBPhoto) => {
+        if (!window.confirm('¿Está seguro de eliminar esta evidencia?')) return;
 
         try {
             setSaving(true);
+            const urlParts = photo.url_foto.split('/fotomedidor/');
+            if (urlParts.length < 2) throw new Error('Formato de URL inválido');
+            const filePath = urlParts[1];
 
-            // Capturar ubicación actual
-            const location = await getCurrentLocation();
+            const { error: storageError } = await supabase.storage
+                .from('fotomedidor')
+                .remove([filePath]);
 
-            let signatureUrl = order?.fimardigital;
+            if (storageError) throw storageError;
 
-            // Solo requerir firma si NO es primera visita sin morador
-            if (selectedMotive !== 1) {
-                if (canvasRef.current) {
-                    const canvas = canvasRef.current;
-                    const signatureData = canvas.toDataURL('image/png');
+            const { error: dbError } = await supabase
+                .from('t_fotos')
+                .delete()
+                .eq('id', photo.id);
 
-                    // Validación 4: Debe existir firma
-                    if (signatureData.length < 2000) {
-                        alert('Por favor, solicita la firma del titular antes de finalizar');
-                        return;
-                    }
+            if (dbError) throw dbError;
 
-                    const blob = await (await fetch(signatureData)).blob();
-                    const fileName = `firma_${id}_${Date.now()}.png`;
-                    const { error: uploadError } = await supabase.storage
-                        .from('fotomedidor')
-                        .upload(`firma/${fileName}`, blob);
-
-                    if (!uploadError) {
-                        const { data: { publicUrl } } = supabase.storage
-                            .from('fotomedidor')
-                            .getPublicUrl(`firma/${fileName}`);
-                        signatureUrl = publicUrl;
-                    }
-                }
-            }
-
-            // Determinar estado final según motivo
-            const nuevoEstado = selectedMotive === 1
-                ? order?.id_estado_orden // Mantener estado actual si es primera visita
-                : 'b28d55bb-f885-4cfa-a181-88c1d80ac118'; // Cerrado Agente
-
-            const { error } = await supabase
-                .from('t_ordenes')
-                .update({
-                    id_estado_orden: nuevoEstado,
-                    paso_actual: 4,
-                    fecha_primera_visita: order?.fecha_primera_visita || new Date().toISOString(),
-                    motivo_de_cierre: selectedMotive,
-                    fimardigital: signatureUrl,
-                    ...(selectedMotive === 1 && {
-                        fecha_segunda_visita: order?.fecha_segunda_visita
-                    }),
-                    latcambio: location?.lat?.toString() || order?.latcambio,
-                    longcambio: location?.lng?.toString() || order?.longcambio
-                })
-                .eq('id_orden', id);
-
-            if (error) throw error;
-
-            // Mensaje de éxito diferenciado
-            if (selectedMotive === 1) {
-                alert('✅ Primera visita registrada. Se programó segunda visita para: ' +
-                    new Date(order?.fecha_segunda_visita!).toLocaleDateString());
-            }
-
-            navigate('/agente/dashboard');
-        } catch (err) {
-            console.error('Error finalizing order:', err);
-            alert('Error al finalizar la orden. Por favor intenta nuevamente.');
+            setPhotos(prev => prev.filter(p => p.id !== photo.id));
+        } catch (err: unknown) {
+            const error = err as Error;
+            console.error('Error deleting file:', error);
+            toast.error('Error al eliminar', error.message);
         } finally {
             setSaving(false);
         }
     };
 
-    // Drawing Logic
-    const startDrawing = (e: any) => {
-        setIsDrawing(true);
-        draw(e);
-    };
-    const stopDrawing = () => {
-        setIsDrawing(false);
-        if (canvasRef.current) {
-            const ctx = canvasRef.current.getContext('2d');
-            ctx?.beginPath();
-        }
-    };
-    const draw = (e: any) => {
-        if (!isDrawing || !canvasRef.current) return;
-        const canvas = canvasRef.current;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-        const rect = canvas.getBoundingClientRect();
-        const x = ((e.clientX || e.touches?.[0]?.clientX) - rect.left) * (canvas.width / rect.width);
-        const y = ((e.clientY || e.touches?.[0]?.clientY) - rect.top) * (canvas.height / rect.height);
-        ctx.lineTo(x, y);
-        ctx.stroke();
-    };
-    const clearSignature = () => {
-        if (canvasRef.current) {
-            const ctx = canvasRef.current.getContext('2d');
-            ctx?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-        }
-    };
+    if (loading || !order) {
+        return (
+            <div className="min-h-screen bg-[#f9fafa] flex items-center justify-center">
+                <Loader2 className="w-10 h-10 animate-spin text-blue-600" />
+            </div>
+        );
+    }
 
-    if (loading) return (
-        <div className="h-screen flex flex-col items-center justify-center bg-gray-50 uppercase font-black text-xs tracking-widest text-gray-400">
-            <Loader2 className="w-10 h-10 animate-spin mb-4 text-blue-600" />
-            Cargando Datos...
-        </div>
-    );
-    if (!order) return null;
+    const steps = [
+        { title: 'Resumen', icon: FileText },
+        { title: 'Inspección', icon: MapPin },
+        { title: 'Instalación', icon: Wrench },
+        { title: 'Cierre', icon: Camera },
+    ];
 
     return (
-        <div className="min-h-screen bg-gray-50 flex flex-col animate-in fade-in duration-500 pb-safe">
+        <div className="min-h-screen bg-[#f9fafa] flex flex-col font-sans">
             {/* Header */}
-            <header className="bg-white border-b border-gray-100 px-4 py-4 sticky top-0 z-20 shadow-sm pt-safe">
+            <header className="bg-white border-b border-gray-100 p-4 sticky top-0 z-20">
                 <div className="max-w-3xl mx-auto flex items-center justify-between">
-                    <div className="flex items-center space-x-4">
-                        <button onClick={() => navigate('/agente/dashboard')} className="p-3 hover:bg-gray-50 rounded-2xl transition-all text-gray-600"><ArrowLeft className="w-5 h-5" /></button>
-                        <div className="text-left">
-                            <h1 className="font-black text-gray-900 text-lg leading-none">Orden #{id}</h1>
-                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1.5">{order.estado_nombre}</p>
-                        </div>
+                    <button onClick={() => navigate(-1)} className="p-2 hover:bg-gray-50 rounded-xl transition-colors">
+                        <ArrowLeft className="w-5 h-5 text-gray-500" />
+                    </button>
+                    <div className="text-center">
+                        <h1 className="text-sm font-black uppercase tracking-widest text-gray-900 leading-none">Ejecutar Orden</h1>
+                        <p className="text-[10px] font-bold text-blue-600 mt-1 uppercase tracking-widest">Orden #{id}</p>
                     </div>
-                    <div className={cn("flex items-center space-x-2 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase transition-all", saving ? "bg-blue-50 text-blue-600 animate-pulse" : "bg-green-50 text-green-600")}>
-                        {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                    <div className={cn(
+                        "flex items-center space-x-2 text-[10px] font-black uppercase tracking-widest",
+                        saving ? "text-orange-500" : "text-green-500"
+                    )}>
+                        <div className={cn("w-2 h-2 rounded-full", saving ? "bg-orange-500 animate-pulse" : "bg-green-500")} />
                         <span>{saving ? 'Guardando' : 'Guardado'}</span>
                     </div>
                 </div>
@@ -458,9 +458,50 @@ const OrderExecution: React.FC = () => {
             <main className="flex-1 p-4 md:p-8 pb-32">
                 <div className="max-w-3xl mx-auto">
                     {step === 1 && <SummaryStep order={order} />}
-                    {step === 2 && <InspectionStep order={order} onUpdate={updateField} readOnly={isClosed} suggestClosureMotive={suggestClosureMotive} />}
-                    {step === 3 && <WorkStep order={order} onUpdate={updateField} lecturaRetirado={lecturaRetirado} setLecturaRetirado={setLecturaRetirado} photos={photos} handleFileUpload={handleFileUpload} readOnly={isClosed} />}
-                    {step === 4 && <ClosingStep order={order} motivos={motivos} onUpdate={updateField} suggested={suggestClosureMotive(order)} canvasRef={canvasRef} startDrawing={startDrawing} stopDrawing={stopDrawing} draw={draw} clearSignature={clearSignature} readOnly={isClosed} />}
+                    {step === 2 && (
+                        <InspectionStep
+                            order={order}
+                            onUpdate={(f: keyof OrderData, v: string) => updateField(f, v, true)}
+                            readOnly={isClosed}
+                            suggestClosureMotive={suggestClosureMotive}
+                        />
+                    )}
+                    {step === 3 && (
+                        <WorkStep
+                            order={order}
+                            onUpdate={updateField}
+                            lecturaRetirado={lecturaRetirado}
+                            setLecturaRetirado={(val: string) => {
+                                setLecturaRetirado(val);
+                                if (order) {
+                                    const floatVal = parseFloat(val);
+                                    if (!isNaN(floatVal)) {
+                                        updateField('diferencialectura', floatVal - order.cliente_lectura);
+                                    }
+                                }
+                            }}
+                            readOnly={isClosed}
+                        />
+                    )}
+                    {step === 4 && (
+                        <ClosingStep
+                            order={order}
+                            motivos={motivos}
+                            onUpdate={updateField}
+                            suggested={suggestClosureMotive(order)}
+                            canvasRef={canvasRef}
+                            startDrawing={startDrawing}
+                            stopDrawing={stopDrawing}
+                            draw={draw}
+                            clearSignature={clearSignature}
+                            photos={photos}
+                            handleFileUpload={handleFileUpload}
+                            handleDeleteFile={handleDeleteFile}
+                            saving={saving}
+                            isDrawing={isDrawing}
+                            readOnly={isClosed}
+                        />
+                    )}
                 </div>
             </main>
 
@@ -486,6 +527,19 @@ const OrderExecution: React.FC = () => {
 
 const SummaryStep = ({ order }: { order: OrderData }) => (
     <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-500 text-left">
+        {order.id_estado_orden === '3945416a-775d-412b-b05b-86a582934aaf' && order.observacion_verificacion && (
+            <div className="bg-amber-50 border border-amber-200 rounded-3xl p-6 flex gap-4 items-start shadow-sm animate-in zoom-in-95 duration-300">
+                <div className="p-3 bg-amber-500 rounded-2xl text-white shadow-lg shadow-amber-500/20">
+                    <AlertTriangle className="w-5 h-5" />
+                </div>
+                <div className="space-y-1">
+                    <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest leading-none">Observación del Supervisor</p>
+                    <p className="text-sm font-black text-amber-900 leading-tight pr-4">
+                        "{order.observacion_verificacion}"
+                    </p>
+                </div>
+            </div>
+        )}
         <section className="bg-white rounded-3xl p-6 shadow-xl shadow-black/5 border border-gray-50 space-y-6">
             <div className="flex items-center space-x-3 border-b border-gray-50 pb-4">
                 <div className="p-2 bg-blue-50 rounded-lg"><User className="w-5 h-5 text-blue-600" /></div>
@@ -505,7 +559,7 @@ const SummaryStep = ({ order }: { order: OrderData }) => (
     </div>
 );
 
-const InspectionStep = ({ order, onUpdate, readOnly, suggestClosureMotive }: { order: OrderData, onUpdate: (f: string, v: string) => void, readOnly?: boolean, suggestClosureMotive: (ord: OrderData | null) => number | null }) => {
+const InspectionStep = ({ order, onUpdate, readOnly, suggestClosureMotive }: { order: OrderData, onUpdate: (f: keyof OrderData, v: string) => void, readOnly?: boolean, suggestClosureMotive: (ord: OrderData | null) => number | null }) => {
     const shouldShow = (field: string): boolean => {
         switch (field) {
             case 'morador':
@@ -536,7 +590,7 @@ const InspectionStep = ({ order, onUpdate, readOnly, suggestClosureMotive }: { o
         }
     };
 
-    const checklistItems = [
+    const checklistItems: { field: keyof OrderData, label: string }[] = [
         { field: 'morador', label: '¿Hay morador presente?' },
         { field: 'cliente_accede_cambio', label: '¿Cliente Accede a que se realice el cambio?' },
         { field: 'coincidenummedidor', label: `Coincide con medidor Num: ${order.cliente_medidor}` },
@@ -552,9 +606,9 @@ const InspectionStep = ({ order, onUpdate, readOnly, suggestClosureMotive }: { o
     const totalVisibleQuestions = checklistItems.filter(item => shouldShow(item.field)).length;
     const answeredQuestions = checklistItems.filter(item =>
         shouldShow(item.field) &&
-        (order as any)[item.field] !== null &&
-        (order as any)[item.field] !== undefined &&
-        (order as any)[item.field] !== ''
+        order[item.field] !== null &&
+        order[item.field] !== undefined &&
+        order[item.field] !== ''
     ).length;
 
     return (
@@ -609,7 +663,7 @@ const InspectionStep = ({ order, onUpdate, readOnly, suggestClosureMotive }: { o
                                     disabled={readOnly}
                                     className={cn(
                                         "py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all",
-                                        (order as any)[item.field] === val
+                                        order[item.field] === val
                                             ? (val === 'SI' ? "bg-cyan-400 text-white shadow-lg shadow-cyan-100" : "bg-red-400 text-white shadow-lg shadow-red-100")
                                             : "bg-gray-50 text-gray-400 hover:bg-gray-100",
                                         readOnly && "opacity-80 cursor-default"
@@ -626,7 +680,15 @@ const InspectionStep = ({ order, onUpdate, readOnly, suggestClosureMotive }: { o
     );
 };
 
-const WorkStep = ({ order, onUpdate, lecturaRetirado, setLecturaRetirado, photos, handleFileUpload, readOnly }: any) => {
+interface WorkStepProps {
+    order: OrderData;
+    onUpdate: (f: string, v: unknown, immediate?: boolean) => void;
+    lecturaRetirado: string;
+    setLecturaRetirado: (val: string) => void;
+    readOnly?: boolean;
+}
+
+const WorkStep = ({ order, onUpdate, lecturaRetirado, setLecturaRetirado, readOnly }: WorkStepProps) => {
     const diff = lecturaRetirado ? parseFloat(lecturaRetirado) - order.cliente_lectura : 0;
 
     return (
@@ -673,7 +735,7 @@ const WorkStep = ({ order, onUpdate, lecturaRetirado, setLecturaRetirado, photos
                         <span className="text-[9px] font-black text-gray-400 uppercase px-1">Regulador</span>
                         <div className="grid grid-cols-2 gap-2">
                             {['SI', 'NO'].map(v => (
-                                <button key={v} disabled={readOnly} onClick={() => onUpdate('regulador', v)} className={cn("py-3 rounded-xl text-[10px] font-black uppercase", order.regulador === v ? "bg-blue-600 text-white shadow-lg" : "bg-gray-50 text-gray-400", readOnly && "opacity-80")}>{v}</button>
+                                <button key={v} disabled={readOnly} onClick={() => onUpdate('regulador', v, true)} className={cn("py-3 rounded-xl text-[10px] font-black uppercase", order.regulador === v ? "bg-blue-600 text-white shadow-lg" : "bg-gray-50 text-gray-400", readOnly && "opacity-80")}>{v}</button>
                             ))}
                         </div>
                     </div>
@@ -681,7 +743,7 @@ const WorkStep = ({ order, onUpdate, lecturaRetirado, setLecturaRetirado, photos
                         <span className="text-[9px] font-black text-gray-400 uppercase px-1">Flexible</span>
                         <div className="grid grid-cols-3 gap-2">
                             {['SI', 'NO', 'DIN'].map(v => (
-                                <button key={v} disabled={readOnly} onClick={() => onUpdate('flexible', v === 'DIN' ? 'Dinatecnica' : v)} className={cn("py-3 rounded-xl text-[10px] font-black uppercase", (v === 'DIN' ? order.flexible === 'Dinatecnica' : order.flexible === v) ? "bg-blue-600 text-white shadow-lg" : "bg-gray-50 text-gray-400", readOnly && "opacity-80")}>{v}</button>
+                                <button key={v} disabled={readOnly} onClick={() => onUpdate('flexible', v === 'DIN' ? 'Dinatecnica' : v, true)} className={cn("py-3 rounded-xl text-[10px] font-black uppercase", (v === 'DIN' ? order.flexible === 'Dinatecnica' : order.flexible === v) ? "bg-blue-600 text-white shadow-lg" : "bg-gray-50 text-gray-400", readOnly && "opacity-80")}>{v}</button>
                             ))}
                         </div>
                     </div>
@@ -692,39 +754,29 @@ const WorkStep = ({ order, onUpdate, lecturaRetirado, setLecturaRetirado, photos
                     <textarea readOnly={readOnly} value={order.observaciones_agente || ''} onChange={(e) => onUpdate('observaciones_agente', e.target.value)} className="w-full p-4 bg-gray-50 rounded-2xl text-xs font-bold border-none outline-none min-h-[100px] disabled:opacity-50" placeholder="Detalles técnicos adicionales..." />
                 </div>
             </section>
-
-            <section className="bg-white rounded-3xl p-6 shadow-xl shadow-black/5 border border-gray-50 space-y-6">
-                <div className="flex items-center justify-between border-b border-gray-50 pb-4">
-                    <div className="flex items-center space-x-3">
-                        <Camera className="w-5 h-5 text-blue-600" />
-                        <h2 className="text-sm font-black uppercase tracking-widest text-gray-400">Archivos Multimedia</h2>
-                    </div>
-                    <span className="text-[9px] font-black text-blue-600 uppercase">Min 2 Fotos</span>
-                </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    {!readOnly && (
-                        <label className="aspect-square bg-gray-50 border-2 border-dashed border-gray-200 rounded-3xl flex items-center justify-center group hover:bg-blue-50 transition-all cursor-pointer">
-                            <input type="file" accept="image/*" capture="environment" onChange={handleFileUpload} className="hidden" />
-                            <Plus className="w-6 h-6 text-gray-300 group-hover:text-blue-400" />
-                        </label>
-                    )}
-                    {photos.map((p: any) => (
-                        <div key={p.id} className="aspect-square rounded-3xl overflow-hidden border border-gray-100 shadow-sm relative group">
-                            <img src={p.url_foto} className="w-full h-full object-cover" alt="Evidencia" />
-                            {!readOnly && (
-                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center">
-                                    <button className="p-2 bg-red-500 text-white rounded-lg shadow-lg"><Eraser className="w-4 h-4" /></button>
-                                </div>
-                            )}
-                        </div>
-                    ))}
-                </div>
-            </section>
         </div>
     );
 };
 
-const ClosingStep = ({ order, motivos, onUpdate, suggested, canvasRef, startDrawing, stopDrawing, draw, clearSignature, readOnly }: any) => {
+interface ClosingStepProps {
+    order: OrderData;
+    motivos: MotivoCierre[];
+    onUpdate: (f: string, v: unknown, immediate?: boolean) => void;
+    suggested: number | null;
+    canvasRef: React.RefObject<HTMLCanvasElement | null>;
+    startDrawing: (e: React.MouseEvent | React.TouchEvent) => void;
+    stopDrawing: () => void;
+    draw: (e: React.MouseEvent | React.TouchEvent) => void;
+    clearSignature: () => void;
+    photos: DBPhoto[];
+    handleFileUpload: (e: React.ChangeEvent<HTMLInputElement>, isVideo: boolean) => void;
+    handleDeleteFile: (photo: DBPhoto) => void;
+    saving: boolean;
+    isDrawing: boolean;
+    readOnly?: boolean;
+}
+
+const ClosingStep = ({ order, motivos, onUpdate, suggested, canvasRef, startDrawing, stopDrawing, draw, clearSignature, photos, handleFileUpload, handleDeleteFile, saving, isDrawing, readOnly }: ClosingStepProps) => {
     const isFirstVisitNoMorador = (order.motivo_de_cierre === 1 || (!order.motivo_de_cierre && suggested === 1));
 
     useEffect(() => {
@@ -746,102 +798,109 @@ const ClosingStep = ({ order, motivos, onUpdate, suggested, canvasRef, startDraw
                 <div className="flex items-center justify-between border-b border-gray-50 pb-4">
                     <div className="flex items-center space-x-3">
                         <MessageSquare className="w-5 h-5 text-blue-600" />
-                        <h2 className="text-sm font-black uppercase tracking-widest text-gray-400">Tipo de Cierre</h2>
+                        <h2 className="text-sm font-black uppercase tracking-widest text-gray-400">Feedback y Evidencia</h2>
                     </div>
-                    {suggested && <span className="px-3 py-1 bg-yellow-100 text-yellow-700 text-[9px] font-black uppercase tracking-widest rounded-lg">Analizado</span>}
                 </div>
 
-                <div className="space-y-2">
-                    {motivos.map((m: any) => (
-                        <button
-                            key={m.id}
+                <div className="space-y-4">
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase text-gray-400 px-1">Motivo de Cierre</label>
+                        <select
                             disabled={readOnly}
-                            onClick={() => onUpdate('motivo_de_cierre', m.id)}
-                            className={cn(
-                                "w-full text-left p-4 rounded-2xl border transition-all text-xs font-bold",
-                                order.motivo_de_cierre === m.id
-                                    ? "bg-blue-600 border-blue-600 text-white shadow-lg"
-                                    : m.id === suggested && !order.motivo_de_cierre
-                                        ? "bg-yellow-50 border-yellow-200 text-gray-700 shadow-md"
-                                        : "bg-gray-50 border-transparent text-gray-600 hover:bg-gray-100",
-                                readOnly && "opacity-80"
-                            )}
+                            value={order.motivo_de_cierre || suggested || ''}
+                            onChange={(e) => onUpdate('motivo_de_cierre', parseInt(e.target.value), true)}
+                            className="w-full px-5 py-4 bg-gray-50 rounded-2xl font-black text-sm focus:ring-2 focus:ring-blue-500/10 outline-none disabled:opacity-50 appearance-none"
                         >
-                            <div className="flex items-center justify-between">
-                                <span>{m.Motivo}</span>
-                                {order.motivo_de_cierre === m.id && <Check className="w-4 h-4" />}
-                                {m.id === suggested && !order.motivo_de_cierre && (
-                                    <span className="text-[9px] font-black uppercase tracking-widest text-yellow-600">
-                                        Sugerido
-                                    </span>
+                            <option value="">Seleccione un motivo...</option>
+                            {motivos.map(m => (
+                                <option key={m.id} value={m.id}>{m.Motivo}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div className="space-y-3">
+                        <div className="flex items-center justify-between px-1">
+                            <label className="text-[10px] font-black uppercase text-gray-400">Evidencias ({photos.length})</label>
+                            <div className="flex gap-2">
+                                <label className="cursor-pointer p-2 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100 transition-colors">
+                                    <Camera className="w-4 h-4" />
+                                    <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => handleFileUpload(e, false)} disabled={saving || readOnly} />
+                                </label>
+                                <label className="cursor-pointer p-2 bg-purple-50 text-purple-600 rounded-xl hover:bg-purple-100 transition-colors">
+                                    <Video className="w-4 h-4" />
+                                    <input type="file" accept="video/*" capture="environment" className="hidden" onChange={(e) => handleFileUpload(e, true)} disabled={saving || readOnly} />
+                                </label>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-3">
+                            {photos.map(p => (
+                                <div key={p.id} className="relative aspect-square rounded-2xl overflow-hidden border border-gray-100 group">
+                                    {p.video ? (
+                                        <div className="w-full h-full bg-gray-900 flex items-center justify-center">
+                                            <Play className="w-6 h-6 text-white" />
+                                        </div>
+                                    ) : (
+                                        <img src={p.url_foto} className="w-full h-full object-cover" alt="Evidencia" />
+                                    )}
+                                    {!readOnly && (
+                                        <button onClick={() => handleDeleteFile(p)} className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <X className="w-3 h-3" />
+                                        </button>
+                                    )}
+                                </div>
+                            ))}
+                            {photos.length === 0 && (
+                                <div className="col-span-3 py-10 text-center border-2 border-dashed border-gray-100 rounded-3xl">
+                                    <Camera className="w-8 h-8 text-gray-200 mx-auto mb-2" />
+                                    <p className="text-[10px] font-black text-gray-300 uppercase tracking-widest">Sin archivos capturados</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {!isFirstVisitNoMorador && (
+                        <div className="space-y-3 pt-4 border-t border-gray-50">
+                            <div className="flex items-center justify-between px-1">
+                                <div className="flex items-center space-x-2">
+                                    <PenTool className="w-4 h-4 text-gray-400" />
+                                    <label className="text-[10px] font-black uppercase text-gray-400">Firma del Cliente</label>
+                                </div>
+                                <button disabled={readOnly} onClick={clearSignature} className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                                    <Eraser className="w-4 h-4" />
+                                </button>
+                            </div>
+
+                            <div className="bg-gray-50 rounded-3xl border-2 border-dashed border-gray-200 overflow-hidden touch-none relative">
+                                {order.fimardigital && !isDrawing && (
+                                    <img src={order.fimardigital} className="absolute inset-0 w-full h-full object-contain pointer-events-none opacity-50" alt="Firma guardada" />
                                 )}
+                                <canvas
+                                    ref={canvasRef}
+                                    width={600}
+                                    height={300}
+                                    className="w-full h-[200px]"
+                                    onMouseDown={startDrawing}
+                                    onMouseMove={draw}
+                                    onMouseUp={stopDrawing}
+                                    onMouseOut={stopDrawing}
+                                    onTouchStart={startDrawing}
+                                    onTouchMove={draw}
+                                    onTouchEnd={stopDrawing}
+                                />
                             </div>
-                        </button>
-                    ))}
+                        </div>
+                    )}
                 </div>
-
-                {isFirstVisitNoMorador && (
-                    <div className="pt-6 border-t border-gray-50 space-y-4 animate-in fade-in slide-in-from-top-2">
-                        <div className="flex items-center space-x-2 text-blue-600">
-                            <Calendar className="w-5 h-5" />
-                            <span className="text-[10px] font-black uppercase tracking-widest">Programar Segunda Visita</span>
-                        </div>
-                        <p className="text-[11px] text-gray-400 font-medium">Al no encontrarse el morador en la primera visita, la orden permanecerá abierta. Por favor, programe el re-intento:</p>
-                        <input
-                            type="date"
-                            readOnly={readOnly}
-                            value={order.fecha_segunda_visita?.split('T')[0] || ''}
-                            onChange={(e) => onUpdate('fecha_segunda_visita', e.target.value)}
-                            className="w-full px-5 py-4 bg-blue-50/50 rounded-2xl font-black text-blue-900 border-none outline-none focus:ring-2 focus:ring-blue-500/10 disabled:opacity-50"
-                        />
-                    </div>
-                )}
             </section>
-
-            {!isFirstVisitNoMorador && (
-                <section className="bg-white rounded-3xl p-6 shadow-xl shadow-black/5 border border-gray-50 space-y-4">
-                    <div className="flex items-center justify-between border-b border-gray-50 pb-4">
-                        <div className="flex items-center space-x-3">
-                            <PenTool className="w-5 h-5 text-blue-600" />
-                            <h2 className="text-sm font-black uppercase tracking-widest text-gray-400">Firma del Titular</h2>
-                        </div>
-                        {!readOnly && <button onClick={clearSignature} className="p-2 text-gray-400 hover:text-red-500 transition-all"><Eraser className="w-4 h-4" /></button>}
-                    </div>
-                    <div className="bg-gray-50 rounded-3xl overflow-hidden border border-gray-100 touch-none shadow-inner relative">
-                        <canvas
-                            ref={canvasRef}
-                            width={800}
-                            height={300}
-                            onMouseDown={(e) => !readOnly && startDrawing(e)}
-                            onMouseUp={stopDrawing}
-                            onMouseMove={(e) => !readOnly && draw(e)}
-                            onTouchStart={(e) => !readOnly && startDrawing(e)}
-                            onTouchEnd={stopDrawing}
-                            onTouchMove={(e) => !readOnly && draw(e)}
-                            className={cn("w-full h-[250px]", readOnly ? "cursor-default" : "cursor-crosshair")}
-                        />
-                        {order.fimardigital && readOnly && (
-                            <div className="absolute inset-0 flex items-center justify-center bg-white/10 pointer-events-none">
-                                <img src={order.fimardigital} className="max-h-full object-contain opacity-80" alt="Firma Guardada" />
-                            </div>
-                        )}
-                    </div>
-                    <div className="p-4 bg-gray-50 rounded-2xl text-[10px] font-black text-gray-400 text-center uppercase tracking-widest">
-                        {readOnly ? 'Vista de Firma Guardada' : 'Pulse y arrastre para dibujar la firma'}
-                    </div>
-                </section>
-            )}
         </div>
     );
 };
 
-const InfoItem = ({ label, value, icon: Icon }: any) => (
+const InfoItem = ({ label, value }: { label: string, value: string | number }) => (
     <div className="space-y-1">
-        <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 leading-none">{label}</p>
-        <div className="flex items-center space-x-2">
-            {Icon && <Icon className="w-3.5 h-3.5 text-gray-300" />}
-            <p className="text-gray-900 font-bold">{value || '---'}</p>
-        </div>
+        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none">{label}</p>
+        <p className="text-sm font-black text-gray-900 truncate">{value || '---'}</p>
     </div>
 );
 

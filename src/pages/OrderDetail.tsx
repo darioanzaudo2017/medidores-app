@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import {
@@ -17,19 +17,38 @@ import {
     Map as MapIcon,
     AlertTriangle,
     CheckSquare,
-    Share2,
     Activity,
     Hash,
-    Briefcase
+    Briefcase,
+    Maximize2,
+    Trash2,
+    RefreshCw,
+    Play,
+    X
 } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { useToast } from '../hooks/useToast';
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+
+// Fix for default marker icons
+import markerIcon from 'leaflet/dist/images/marker-icon.png';
+import markerShadow from 'leaflet/dist/images/marker-shadow.png';
+
+const DefaultIcon = L.icon({
+    iconUrl: markerIcon,
+    shadowUrl: markerShadow,
+    iconSize: [25, 41],
+    iconAnchor: [12, 41]
+});
+L.Marker.prototype.options.icon = DefaultIcon;
 
 interface OrderDetailData {
     id_orden: number;
     created_at: string;
     clase_orden: string;
     cliente_nombre: string;
-    cliente_apellido: string;
     cliente_calle: string;
     cliente_numero: number;
     cliente_piso: string;
@@ -61,19 +80,32 @@ interface OrderDetailData {
     perdida_valvula: string;
     operar_valvula: string;
     accede_vivienda: string;
+    latcambio: string;
+    longcambio: string;
+    fimardigital: string;
+}
+
+interface DBPhoto {
+    id: string;
+    url_foto: string;
+    video: boolean;
 }
 
 export const OrderDetail = () => {
     const { id } = useParams();
     const navigate = useNavigate();
+    const toast = useToast();
     const [order, setOrder] = useState<OrderDetailData | null>(null);
     const [loading, setLoading] = useState(true);
     const [verificationComment, setVerificationComment] = useState('');
     const [updating, setUpdating] = useState(false);
     const [infoCorrect, setInfoCorrect] = useState(false);
     const [photosCorrect, setPhotosCorrect] = useState(false);
+    const [photos, setPhotos] = useState<DBPhoto[]>([]);
+    const [selectedMedia, setSelectedMedia] = useState<DBPhoto | null>(null);
+    const [showReassignModal, setShowReassignModal] = useState(false);
 
-    const fetchOrderData = async () => {
+    const fetchOrderData = useCallback(async () => {
         if (!id) return;
         setLoading(true);
         try {
@@ -86,25 +118,31 @@ export const OrderDetail = () => {
             if (error) throw error;
             setOrder(data);
 
-            // Initial reset of toggles if it's already verified? 
-            // Actually they only show for CERRADO AGENTE so it's fine.
+            // Fetch actual photos
+            const { data: photosData } = await supabase
+                .from('t_fotos')
+                .select('id, url_foto, video')
+                .eq('orden_id', id);
+
+            if (photosData) setPhotos(photosData as DBPhoto[]);
+
         } catch (err) {
             console.error('Error fetching order details:', err);
         } finally {
             setLoading(false);
         }
-    };
+    }, [id]);
 
     useEffect(() => {
         fetchOrderData();
-    }, [id]);
+    }, [fetchOrderData]);
 
     const handleUpdateStatus = async (newStatus: string) => {
         if (!order || !id) return;
 
         // If verifying, we require the toggles
         if (newStatus === 'VERIFICADO' && (!infoCorrect || !photosCorrect)) {
-            alert('Por favor, confirme que la información y las fotos son correctas.');
+            toast.warning('Validación requerida', 'Por favor, confirme que la información y las fotos son correctas.');
             return;
         }
 
@@ -130,6 +168,13 @@ export const OrderDetail = () => {
 
             if (error) throw error;
 
+            // Success message
+            if (newStatus === 'VERIFICADO') {
+                toast.success('Orden Verificada', `La orden #${id} ha sido verificada y archivada correctamente.`);
+            } else if (newStatus === 'REASIGNADO') {
+                toast.success('Orden Reasignada', `La orden #${id} ha sido enviada nuevamente al agente.`);
+            }
+
             // Refetch to see changes
             await fetchOrderData();
             setVerificationComment('');
@@ -137,7 +182,40 @@ export const OrderDetail = () => {
             setPhotosCorrect(false);
         } catch (err) {
             console.error('Error updating status:', err);
-            alert('Error al actualizar el estado de la orden');
+            toast.error('Error de actualización', 'No se pudo actualizar el estado de la orden');
+        } finally {
+            setUpdating(false);
+        }
+    };
+
+    const handleDeleteFile = async (photo: DBPhoto) => {
+        if (!window.confirm('¿Está seguro de eliminar esta evidencia?')) return;
+
+        try {
+            setUpdating(true);
+            const urlParts = photo.url_foto.split('/fotomedidor/');
+            if (urlParts.length < 2) throw new Error('Formato de URL inválido');
+            const filePath = urlParts[1];
+
+            const { error: storageError } = await supabase.storage
+                .from('fotomedidor')
+                .remove([filePath]);
+
+            if (storageError) throw storageError;
+
+            const { error: dbError } = await supabase
+                .from('t_fotos')
+                .delete()
+                .eq('id', photo.id);
+
+            if (dbError) throw dbError;
+
+            toast.success('Archivo eliminado', 'La evidencia ha sido eliminada correctamente.');
+            setPhotos(prev => prev.filter(p => p.id !== photo.id));
+        } catch (err: unknown) {
+            const error = err as Error;
+            console.error('Error deleting file:', error);
+            toast.error('Error al eliminar', error.message);
         } finally {
             setUpdating(false);
         }
@@ -212,10 +290,7 @@ export const OrderDetail = () => {
 
                 {/* Main Grid Layout */}
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-                    {/* Left Column (65%) */}
                     <div className="lg:col-span-8 flex flex-col gap-8">
-
-                        {/* Summary Stats for Detailed View */}
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                             <SmallStat label="Clase" value={order.clase_orden} icon={Briefcase} />
                             <SmallStat label="Localidad" value={order.cliente_localidad} icon={MapPin} />
@@ -223,7 +298,6 @@ export const OrderDetail = () => {
                             <SmallStat label="Contrato" value={order.cliente_cuenta_contrato} icon={ClipboardList} />
                         </div>
 
-                        {/* Client Information Card */}
                         <div className="bg-white dark:bg-[#1a2e2f] rounded-2xl shadow-xl shadow-black/5 border border-[#dbe5e6] dark:border-[#2d4546] overflow-hidden">
                             <div className="p-6 border-b border-[#f1f3f4] dark:border-white/5 flex justify-between items-center bg-[#f9fafa] dark:bg-white/[0.02]">
                                 <h3 className="font-black text-xs uppercase tracking-widest flex items-center gap-2">
@@ -238,7 +312,7 @@ export const OrderDetail = () => {
                             <div className="grid md:grid-cols-2">
                                 <div className="p-8 space-y-8">
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-6 gap-x-4">
-                                        <InfoItem label="Nombre Legal Completo" value={`${order.cliente_nombre} ${order.cliente_apellido}`} />
+                                        <InfoItem label="Nombre Legal Completo" value={order.cliente_nombre} />
                                         <InfoItem label="Celular / Teléfono" value={order.cliente_telefono} isPhone />
                                         <InfoItem label="Punto de Suministro" value={order.cliente_punto_suministro} />
                                         <InfoItem label="Distribución Local" value={order.cliente_localidad} />
@@ -272,26 +346,43 @@ export const OrderDetail = () => {
                                         </div>
                                     </div>
                                 </div>
-                                <div className="bg-[#f1f3f4] dark:bg-white/5 relative group cursor-crosshair overflow-hidden border-l border-[#f1f3f4] dark:border-white/5">
-                                    <div className="absolute inset-0 bg-cover bg-center opacity-40 group-hover:opacity-60 transition-opacity flex items-center justify-center text-gray-400">
-                                        <MapIcon className="w-20 h-20 opacity-10" />
-                                    </div>
-                                    <div className="absolute inset-0 flex items-center justify-center">
-                                        <div className="relative">
-                                            <div className="absolute -inset-4 bg-primary/20 rounded-full animate-ping"></div>
-                                            <div className="w-10 h-10 bg-primary rounded-xl shadow-2xl flex items-center justify-center text-[#121617] border-2 border-white dark:border-background-dark transform rotate-3 group-hover:rotate-0 transition-transform">
-                                                <MapPin className="w-6 h-6" />
-                                            </div>
+                                <div className="bg-[#f1f3f4] dark:bg-white/5 relative group overflow-hidden border-l border-[#f1f3f4] dark:border-white/5 h-[300px] md:h-auto">
+                                    {(order.latcambio && order.longcambio && !isNaN(parseFloat(order.latcambio)) && !isNaN(parseFloat(order.longcambio))) ? (
+                                        <div className="absolute inset-0 z-0">
+                                            <MapContainer
+                                                center={[parseFloat(order.latcambio), parseFloat(order.longcambio)]}
+                                                zoom={15}
+                                                style={{ height: '100%', width: '100%' }}
+                                                scrollWheelZoom={false}
+                                            >
+                                                <TileLayer
+                                                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                                                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                                                />
+                                                <Marker position={[parseFloat(order.latcambio), parseFloat(order.longcambio)]}>
+                                                    <Popup>
+                                                        <div className="font-sans">
+                                                            <p className="font-black text-slate-800 m-0">Punto de Inspección</p>
+                                                            <p className="text-[10px] text-gray-400 uppercase tracking-widest mt-1">Orden #{order.id_orden}</p>
+                                                        </div>
+                                                    </Popup>
+                                                </Marker>
+                                            </MapContainer>
                                         </div>
-                                    </div>
-                                    <div className="absolute bottom-4 right-4 px-3 py-1 bg-black/80 rounded-full text-[10px] font-black text-white tracking-widest backdrop-blur-md italic">
-                                        SITIO GEOLOCALIZADO
+                                    ) : (
+                                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-900/20 p-8 text-center text-gray-400">
+                                            <MapIcon className="w-12 h-12 mb-3 opacity-20" />
+                                            <p className="text-[10px] font-black uppercase tracking-widest leading-none">Sin coordenadas de captura</p>
+                                            <p className="text-[9px] mt-2 italic opacity-60">El agente no registró posición GPS al cerrar la orden.</p>
+                                        </div>
+                                    )}
+                                    <div className="absolute bottom-4 right-4 z-10 px-3 py-1 bg-black/80 rounded-full text-[10px] font-black text-white tracking-widest backdrop-blur-md italic">
+                                        PUNTO DE INSPECCIÓN
                                     </div>
                                 </div>
                             </div>
                         </div>
 
-                        {/* Meter Data Card */}
                         <div className="bg-white dark:bg-[#1a2e2f] rounded-2xl shadow-xl shadow-black/5 border border-[#dbe5e6] dark:border-[#2d4546] overflow-hidden">
                             <div className="p-6 border-b border-[#f1f3f4] dark:border-white/5 bg-[#f9fafa] dark:bg-white/[0.02]">
                                 <h3 className="font-black text-xs uppercase tracking-widest flex items-center gap-2">
@@ -328,13 +419,12 @@ export const OrderDetail = () => {
                                         )}>
                                             {order.diferencia > 0 ? `+${order.diferencia}` : order.diferencia || '0.0'}
                                         </p>
-                                        <p className="text-[10px] font-bold text-[#618789] mt-2 italic italic opacity-60 px-2 leading-none border-t border-gray-500/10 pt-2 w-full">Medido en m³</p>
+                                        <p className="text-[10px] font-bold text-[#618789] mt-2 italic opacity-60 px-2 leading-none border-t border-gray-500/10 pt-2 w-full">Medido en m³</p>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
-                        {/* Photo Gallery Section */}
                         <div className="space-y-6">
                             <div className="flex items-center justify-between">
                                 <h3 className="font-black text-xs uppercase tracking-widest flex items-center gap-2">
@@ -346,29 +436,66 @@ export const OrderDetail = () => {
                                 </button>
                             </div>
                             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                                {[
-                                    { label: 'ANTES', icon: Clock },
-                                    { label: 'DESPUÉS', icon: CheckCircle },
-                                    { label: 'ENTORNO', icon: MapIcon },
-                                    { label: 'ID MEDIDOR', icon: Hash }
-                                ].map((photo, i) => (
-                                    <div key={i} className="group relative aspect-square rounded-2xl overflow-hidden cursor-zoom-in border-4 border-white dark:border-[#1a2e2f] shadow-lg shadow-black/5 bg-[#f1f3f4] dark:bg-white/5 transition-transform hover:-translate-y-1">
-                                        <div className="absolute inset-0 flex items-center justify-center opacity-20 group-hover:opacity-40 transition-opacity">
-                                            <photo.icon className="w-12 h-12 text-[#618789]" />
+                                {photos.length === 0 ? (
+                                    [...Array(4)].map((_, i) => (
+                                        <div key={i} className="aspect-square rounded-2xl bg-[#f1f3f4] dark:bg-white/5 border border-dashed border-gray-200 dark:border-white/10 flex items-center justify-center">
+                                            <ImageIcon className="w-8 h-8 text-gray-300" />
                                         </div>
-                                        <div className="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-black/80 text-white transform translate-y-2 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all backdrop-blur-sm">
-                                            <p className="text-[9px] font-black uppercase tracking-widest leading-none">{photo.label}</p>
-                                            <p className="text-[8px] opacity-60 mt-1 font-bold italic">CAPTURE_ID_{i + 1523}</p>
+                                    ))
+                                ) : (
+                                    photos.map((photo) => (
+                                        <div
+                                            key={photo.id}
+                                            className="group relative aspect-square rounded-2xl overflow-hidden border-4 border-white dark:border-[#1a2e2f] shadow-lg shadow-black/5 bg-[#f1f3f4] dark:bg-white/5 transition-transform hover:-translate-y-1"
+                                        >
+                                            <div onClick={() => setSelectedMedia(photo)} className="absolute inset-0 z-0 cursor-zoom-in">
+                                                {photo.video ? (
+                                                    <div className="w-full h-full relative">
+                                                        <video src={photo.url_foto} className="w-full h-full object-cover" muted playsInline />
+                                                        <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/40 transition-all">
+                                                            <Play className="w-10 h-10 text-white drop-shadow-lg" />
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <img src={photo.url_foto} className="w-full h-full object-cover" alt="Evidencia" />
+                                                )}
+                                            </div>
+
+                                            <div className="absolute top-3 left-3 px-2 py-1 rounded-lg bg-black/60 backdrop-blur-md text-[8px] font-black text-white uppercase tracking-widest border border-white/10 pointer-events-none">
+                                                {photo.video ? 'VIDEO' : 'FOTO'}
+                                            </div>
+
+                                            <div className="absolute top-3 right-3 flex gap-2 translate-y-[-10px] opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all z-10">
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); handleDeleteFile(photo); }}
+                                                    className="p-1.5 bg-red-500 hover:bg-red-600 text-white rounded-lg shadow-lg transition-colors border border-red-400"
+                                                    title="Eliminar"
+                                                >
+                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                </button>
+                                                <button
+                                                    onClick={() => setSelectedMedia(photo)}
+                                                    className="p-1.5 bg-white/20 backdrop-blur-md rounded-lg border border-white/20 text-white hover:bg-white/40 transition-all"
+                                                    title="Ampliar"
+                                                >
+                                                    <Maximize2 className="w-3.5 h-3.5" />
+                                                </button>
+                                            </div>
+
+                                            <div className="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-black/80 text-white transform translate-y-2 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all backdrop-blur-sm pointer-events-none">
+                                                <p className="text-[9px] font-black uppercase tracking-widest leading-none">
+                                                    {photo.video ? 'Registro de Video' : 'Captura Fotográfica'}
+                                                </p>
+                                                <p className="text-[8px] opacity-60 mt-1 font-bold italic">ID_{String(photo.id).substring(0, 8).toUpperCase()}</p>
+                                            </div>
                                         </div>
-                                    </div>
-                                ))}
+                                    ))
+                                )}
                             </div>
                         </div>
                     </div>
 
-                    {/* Right Column (35%) */}
                     <div className="lg:col-span-4 flex flex-col gap-8">
-                        {/* Order Details Card */}
                         <div className="bg-white dark:bg-[#1a2e2f] rounded-2xl shadow-xl shadow-black/5 border border-[#dbe5e6] dark:border-[#2d4546] p-8">
                             <h3 className="font-black text-xs uppercase tracking-widest mb-8 flex items-center gap-2">
                                 <ClipboardList className="w-5 h-5 text-primary" />
@@ -376,26 +503,18 @@ export const OrderDetail = () => {
                             </h3>
                             <div className="space-y-5">
                                 <DetailItem label="Agente de Campo Asignado" value={`${order.agente_nombre} ${order.agente_apellido}`} />
-                                <DetailItem label="Contacto del Agente" value={order.agente_email} isPhone={false} muted />
+                                <DetailItem label="Contacto del Agente" value={order.agente_email} muted />
                                 <DetailItem label="Motivo de Cierre" value={order.motivo_cierre_nombre} />
                                 <DetailItem label="Primera Visita" value={order.fecha_primera_visita ? new Date(order.fecha_primera_visita).toLocaleString() : '---'} />
                                 <div className="flex justify-between py-2 items-center">
                                     <span className="text-[11px] font-bold text-[#618789] uppercase tracking-widest">Índice de Prioridad</span>
                                     <span className="px-3 py-1 bg-green-500/10 text-green-500 rounded-lg text-[10px] font-black uppercase tracking-widest">Normal</span>
                                 </div>
-                                <div className="flex justify-between py-2 items-center">
-                                    <span className="text-[11px] font-bold text-[#618789] uppercase tracking-widest">Estado SLA</span>
-                                    <span className="px-3 py-1 bg-blue-500/10 text-blue-500 rounded-lg text-[10px] font-black uppercase tracking-widest italic font-mono">A Tiempo</span>
-                                </div>
                             </div>
                         </div>
 
-                        {/* Detailed Field Checklist Card */}
-                        <div className="bg-white dark:bg-[#1a2e2f] rounded-2xl shadow-xl shadow-black/5 border border-[#dbe5e6] dark:border-[#2d4546] p-8 overflow-hidden relative group">
-                            <div className="absolute top-0 right-0 p-8 opacity-[0.03] group-hover:opacity-[0.07] transition-all">
-                                <CheckSquare className="w-32 h-32" />
-                            </div>
-                            <h3 className="font-black text-xs uppercase tracking-widest mb-8 flex items-center gap-2 relative z-10 transition-colors group-hover:text-primary">
+                        <div className="bg-white dark:bg-[#1a2e2f] rounded-2xl shadow-xl shadow-black/5 border border-[#dbe5e6] dark:border-[#2d4546] p-8">
+                            <h3 className="font-black text-xs uppercase tracking-widest mb-8 flex items-center gap-2">
                                 <CheckSquare className="w-5 h-5 text-primary" />
                                 Protocolo de Verificación de Campo
                             </h3>
@@ -412,185 +531,193 @@ export const OrderDetail = () => {
                                 <FieldCheck label="Acceso Interno" status={order.accede_vivienda} />
                             </div>
 
-                            <div className="mt-10 pt-6 border-t border-[#f1f3f4] dark:border-white/5">
-                                <div className="flex items-center gap-3 p-4 bg-[#f9fafa] dark:bg-white/[0.02] rounded-xl border border-transparent dark:border-white/5">
-                                    <div className="size-10 rounded-xl bg-orange-500/10 flex items-center justify-center text-orange-500 shadow-sm">
-                                        <AlertTriangle className="w-5 h-5" />
-                                    </div>
-                                    <div className="flex-1 overflow-hidden">
-                                        <p className="text-[9px] font-black text-[#121617] dark:text-white uppercase tracking-widest leading-tight">Comentarios de Campo</p>
-                                        <p className="text-[11px] text-[#618789] font-medium leading-normal mt-1 italic italic italic">
-                                            {order.motivo_cierre_nombre ? `"${order.motivo_cierre_nombre}"` : 'No se proporcionaron comentarios adicionales por el agente de campo...'}
-                                        </p>
+                            {order.fimardigital && (
+                                <div className="mt-10 pt-6 border-t border-[#f1f3f4] dark:border-white/5">
+                                    <p className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest leading-tight mb-3">Conformidad del Cliente (Firma)</p>
+                                    <div className="bg-gray-50 dark:bg-black/20 rounded-lg p-3 flex items-center justify-center border border-dashed border-gray-200 dark:border-white/10">
+                                        <img src={order.fimardigital} alt="Firma del Cliente" className="max-h-24 object-contain invert dark:invert-0 opacity-80" />
                                     </div>
                                 </div>
-                            </div>
+                            )}
                         </div>
                     </div>
                 </div>
             </main>
 
-            {/* Sticky Bottom Verification Bar */}
             {order.estado_nombre === 'CERRADO AGENTE' && (
                 <footer className="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-[#1a2e2f]/95 border-t border-[#dbe5e6] dark:border-[#2d4546] p-4 shadow-[0_-4px_40px_rgba(0,0,0,0.18)] backdrop-blur-2xl z-[40]">
                     <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center gap-6 px-4">
                         <div className="flex-1 w-full space-y-3">
-                            {/* Confirmation Toggles */}
                             <div className="flex flex-wrap gap-4 mb-1">
                                 <label className="flex items-center gap-2 cursor-pointer group">
-                                    <div
-                                        onClick={() => setInfoCorrect(!infoCorrect)}
-                                        className={cn(
-                                            "w-10 h-5 rounded-full transition-colors relative",
-                                            infoCorrect ? "bg-green-500" : "bg-gray-300 dark:bg-white/10"
-                                        )}
-                                    >
-                                        <div className={cn(
-                                            "absolute top-1 w-3 h-3 bg-white rounded-full transition-all",
-                                            infoCorrect ? "left-6" : "left-1"
-                                        )} />
+                                    <div onClick={() => setInfoCorrect(!infoCorrect)} className={cn("w-10 h-5 rounded-full transition-colors relative", infoCorrect ? "bg-green-500" : "bg-gray-300 dark:bg-white/10")}>
+                                        <div className={cn("absolute top-1 w-3 h-3 bg-white rounded-full transition-all", infoCorrect ? "left-6" : "left-1")} />
                                     </div>
-                                    <span className="text-[11px] font-black uppercase tracking-widest text-[#618789] group-hover:text-primary transition-colors">
-                                        Información Correcta
-                                    </span>
+                                    <span className="text-[11px] font-black uppercase tracking-widest text-[#618789]">Información Correcta</span>
                                 </label>
                                 <label className="flex items-center gap-2 cursor-pointer group">
-                                    <div
-                                        onClick={() => setPhotosCorrect(!photosCorrect)}
-                                        className={cn(
-                                            "w-10 h-5 rounded-full transition-colors relative",
-                                            photosCorrect ? "bg-green-500" : "bg-gray-300 dark:bg-white/10"
-                                        )}
-                                    >
-                                        <div className={cn(
-                                            "absolute top-1 w-3 h-3 bg-white rounded-full transition-all",
-                                            photosCorrect ? "left-6" : "left-1"
-                                        )} />
+                                    <div onClick={() => setPhotosCorrect(!photosCorrect)} className={cn("w-10 h-5 rounded-full transition-colors relative", photosCorrect ? "bg-green-500" : "bg-gray-300 dark:bg-white/10")}>
+                                        <div className={cn("absolute top-1 w-3 h-3 bg-white rounded-full transition-all", photosCorrect ? "left-6" : "left-1")} />
                                     </div>
-                                    <span className="text-[11px] font-black uppercase tracking-widest text-[#618789] group-hover:text-primary transition-colors">
-                                        Fotos Correctas
-                                    </span>
+                                    <span className="text-[11px] font-black uppercase tracking-widest text-[#618789]">Fotos Correctas</span>
                                 </label>
                             </div>
-
-                            <div className="relative group">
-                                <textarea
-                                    value={verificationComment}
-                                    onChange={(e) => setVerificationComment(e.target.value)}
-                                    className="w-full bg-[#f1f3f4]/50 dark:bg-background-dark/30 border-[#dbe5e6] dark:border-[#2d4546] rounded-2xl text-sm focus:ring-4 focus:ring-primary/10 focus:border-primary pr-20 resize-none py-4 px-6 outline-none transition-all border font-bold text-[#121617] dark:text-white placeholder:text-[#618789]/50"
-                                    placeholder="Agregar feedback de verificación o notas de auditoría..."
-                                    rows={1}
-                                    disabled={updating}
-                                />
-                                <div className="absolute right-4 top-1/2 -translate-y-1/2 flex gap-1">
-                                    <button className="p-2 text-[#618789] hover:text-primary transition-all rounded-lg hover:bg-white dark:hover:bg-white/10 group-hover:scale-110">
-                                        <Share2 className="w-4 h-4" />
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-3 w-full md:w-auto overflow-x-auto no-scrollbar pb-2 md:pb-0">
-                            <button
-                                onClick={() => handleUpdateStatus('REASIGNADO')}
+                            <textarea
+                                value={verificationComment}
+                                onChange={(e) => setVerificationComment(e.target.value)}
+                                className="w-full bg-[#f1f3f4]/50 dark:bg-background-dark/30 border-[#dbe5e6] dark:border-[#2d4546] rounded-2xl text-sm py-4 px-6 outline-none transition-all border font-bold text-[#121617] dark:text-white placeholder:text-[#618789]/50"
+                                placeholder="Feedback rápido (opcional)..."
+                                rows={1}
                                 disabled={updating}
-                                className="flex-1 md:flex-none px-6 py-4 border border-amber-500/20 text-amber-500 hover:bg-amber-500/5 rounded-2xl font-black text-[10px] tracking-widest transition-all flex items-center justify-center gap-2 group whitespace-nowrap disabled:opacity-50"
+                            />
+                        </div>
+                        <div className="flex items-center gap-3 w-full md:w-auto self-end md:self-center">
+                            <button
+                                onClick={() => setShowReassignModal(true)}
+                                disabled={updating}
+                                className="flex-1 md:flex-none px-6 py-4 border border-amber-500/20 text-amber-500 hover:bg-amber-500/5 rounded-2xl font-black text-[10px] tracking-widest transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                             >
-                                <Edit3 className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                                <Edit3 className="w-4 h-4" />
                                 REPROCESAR / OBSERVAR
                             </button>
                             <button
                                 onClick={() => handleUpdateStatus('VERIFICADO')}
                                 disabled={updating || !infoCorrect || !photosCorrect}
                                 className={cn(
-                                    "flex-1 md:flex-none px-12 py-4 rounded-2xl font-black text-[10px] tracking-widest transition-all flex items-center justify-center gap-3 group active:scale-95 whitespace-nowrap",
-                                    (infoCorrect && photosCorrect)
-                                        ? "bg-primary text-[#121617] hover:bg-primary/90 hover:shadow-2xl hover:shadow-primary/40 shadow-lg shadow-primary/20"
-                                        : "bg-gray-200 dark:bg-white/5 text-gray-400 cursor-not-allowed border dark:border-white/5"
+                                    "flex-1 md:flex-none px-12 py-4 rounded-2xl font-black text-[10px] tracking-widest transition-all shadow-lg",
+                                    (infoCorrect && photosCorrect) ? "bg-primary text-[#121617] hover:bg-primary/90" : "bg-gray-200 text-gray-400 cursor-not-allowed"
                                 )}
                             >
-                                {updating ? (
-                                    <Clock className="w-4 h-4 animate-spin" />
-                                ) : (
-                                    <CheckCircle className="w-4 h-4 group-hover:scale-110 transition-transform" />
-                                )}
+                                {updating ? <Clock className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4 mr-2 inline" />}
                                 VERIFICAR Y ARCHIVAR
                             </button>
                         </div>
                     </div>
                 </footer>
             )}
+
+            {/* Reassign Modal */}
+            {showReassignModal && (
+                <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+                    <div className="bg-white dark:bg-[#1a2e2f] w-full max-w-lg rounded-3xl shadow-2xl border border-[#dbe5e6] dark:border-[#2d4546] overflow-hidden">
+                        <div className="p-8 border-b border-[#f1f3f4] dark:border-white/5 flex justify-between items-center bg-[#f9fafa] dark:bg-white/[0.02]">
+                            <div className="flex items-center gap-3">
+                                <div className="size-10 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-600">
+                                    <Edit3 className="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <h3 className="font-black text-xs uppercase tracking-widest text-[#121617] dark:text-white">Reasignar a Operario</h3>
+                                    <p className="text-[10px] font-bold text-[#618789] uppercase mt-0.5">La orden volverá a la cola del agente</p>
+                                </div>
+                            </div>
+                            <button onClick={() => setShowReassignModal(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-white/5 rounded-xl transition-all">
+                                <X className="w-5 h-5 text-[#618789]" />
+                            </button>
+                        </div>
+                        <div className="p-8 space-y-6">
+                            <div className="space-y-3">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-[#618789] flex items-center gap-2">
+                                    <AlertTriangle className="w-3.5 h-3.5" />
+                                    Observaciones para el Agente
+                                </label>
+                                <textarea
+                                    value={verificationComment}
+                                    onChange={(e) => setVerificationComment(e.target.value)}
+                                    placeholder="Indique qué debe corregir o revisar el operario..."
+                                    className="w-full bg-[#f1f3f4]/50 dark:bg-background-dark/30 border-[#dbe5e6] dark:border-[#2d4546] rounded-2xl text-sm p-5 min-h-[150px] outline-none transition-all font-bold resize-none text-[#121617] dark:text-white placeholder:text-[#618789]/50"
+                                />
+                                <p className="text-[9px] text-amber-600 font-bold italic">Este comentario será visible para el agente en su dispositivo.</p>
+                            </div>
+                            <div className="flex gap-3">
+                                <button onClick={() => setShowReassignModal(false)} className="flex-1 py-4 bg-gray-100 dark:bg-white/5 text-[#618789] rounded-2xl font-black text-[10px] tracking-widest uppercase">Cancelar</button>
+                                <button
+                                    onClick={async () => {
+                                        if (!verificationComment.trim()) {
+                                            toast.warning('Observación requerida', 'Ingrese una observación para el agente.');
+                                            return;
+                                        }
+                                        await handleUpdateStatus('REASIGNADO');
+                                        setShowReassignModal(false);
+                                    }}
+                                    disabled={updating}
+                                    className="flex-[2] py-4 bg-amber-500 text-white rounded-2xl font-black text-[10px] tracking-widest uppercase shadow-lg hover:bg-amber-600 flex items-center justify-center gap-2"
+                                >
+                                    {updating ? <Clock className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                                    Confirmar y Reasignar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Media Viewer Modal */}
+            {selectedMedia && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-xl">
+                    <button onClick={() => setSelectedMedia(null)} className="absolute top-8 right-8 p-3 bg-white/10 hover:bg-white/20 text-white rounded-full transition-all border border-white/10"><X className="w-6 h-6" /></button>
+                    <div className="w-full max-w-5xl px-4 flex flex-col items-center">
+                        <div className="w-full aspect-video md:aspect-auto md:max-h-[80vh] bg-black rounded-3xl overflow-hidden shadow-2xl border border-white/5 flex items-center justify-center">
+                            {selectedMedia.video ? <video src={selectedMedia.url_foto} className="max-h-full w-full object-contain" controls autoPlay /> : <img src={selectedMedia.url_foto} className="max-h-full w-full object-contain" alt="Evidencia Full" />}
+                        </div>
+                        <div className="mt-8 text-center">
+                            <p className="text-white text-lg font-black tracking-tight">{selectedMedia.video ? 'Registro de Video' : 'Captura Fotográfica'}</p>
+                            <p className="text-gray-400 text-xs font-bold uppercase tracking-[0.2em] mt-2">ORD-{id} • EVIDENCE_ID_{String(selectedMedia.id).toUpperCase().substring(0, 12)}</p>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
 
-const SmallStat = ({ label, value, icon: Icon, color = 'text-[#121617] dark:text-white' }: any) => (
-    <div className="bg-white dark:bg-[#1a2e2f] p-4 rounded-2xl border border-[#dbe5e6] dark:border-[#2d4546] shadow-sm hover:border-primary/30 transition-all group">
-        <div className="flex items-center gap-2 mb-2">
-            <div className="size-6 rounded-lg bg-primary/10 flex items-center justify-center group-hover:bg-primary group-hover:text-[#121617] transition-all">
-                <Icon className="w-3 h-3" />
-            </div>
-            <span className="text-[10px] font-black text-[#618789] uppercase tracking-widest font-mono">{label}</span>
+interface SmallStatProps {
+    label: string;
+    value: string | number;
+    icon: React.ElementType;
+    color?: string;
+}
+
+const SmallStat = ({ label, value, icon: Icon, color = 'text-[#121617] dark:text-white' }: SmallStatProps) => (
+    <div className="bg-white dark:bg-[#1a2e2f] p-4 rounded-2xl border border-[#dbe5e6] dark:border-[#2d4546] shadow-sm flex flex-col gap-2">
+        <div className="flex items-center gap-2">
+            <div className="size-6 rounded-lg bg-primary/10 flex items-center justify-center text-primary"><Icon className="w-3 h-3" /></div>
+            <span className="text-[10px] font-black text-[#618789] uppercase tracking-widest">{label}</span>
         </div>
-        <p className={cn("text-xs font-black truncate max-w-full", color)}>{value || '---'}</p>
+        <p className={cn("text-xs font-black truncate", color)}>{value || '---'}</p>
     </div>
 );
 
-const InfoItem = ({ label, value, isPhone, muted }: { label: string, value?: string | number, isPhone?: boolean, muted?: boolean }) => (
+const InfoItem = ({ label, value, isPhone }: { label: string, value?: string | number, isPhone?: boolean }) => (
     <div>
-        <p className="text-[9px] text-[#618789] uppercase font-black tracking-widest mb-1.5 px-0.5 opacity-60">{label}</p>
-        <p className={cn(
-            "font-black text-[13px] tracking-tight",
-            muted ? "text-[#618789] font-bold" : "text-[#121617] dark:text-white",
-            isPhone && "text-primary tabular-nums italic decoration-primary/20 underline underline-offset-4"
-        )}>
-            {value || 'N/A'}
-        </p>
+        <p className="text-[9px] text-[#618789] uppercase font-black tracking-widest mb-1 opacity-60">{label}</p>
+        <p className={cn("font-black text-[13px] tracking-tight text-[#121617] dark:text-white", isPhone && "text-primary italic underline underline-offset-4 decoration-primary/20")}>{value || 'N/A'}</p>
     </div>
 );
 
-const DetailItem = ({ label, value, isPhone, muted }: { label: string, value?: string | number, isPhone?: boolean, muted?: boolean }) => (
-    <div className="flex justify-between py-2.5 border-b border-[#f1f3f4] dark:border-white/5 items-center group">
-        <span className="text-[10px] font-black text-[#618789] uppercase tracking-widest group-hover:text-primary transition-colors">{label}</span>
-        <span className={cn(
-            "text-[11px] font-black underline-offset-4 decoration-primary/30 truncate max-w-[180px] text-right tabular-nums",
-            muted ? "text-[#618789] font-medium" : "text-[#121617] dark:text-white",
-            isPhone && "text-primary italic"
-        )}>
-            {value || '---'}
-        </span>
+const DetailItem = ({ label, value, muted }: { label: string, value?: string | number, muted?: boolean }) => (
+    <div className="flex justify-between py-2.5 border-b border-[#f1f3f4] dark:border-white/5 items-center">
+        <span className="text-[10px] font-black text-[#618789] uppercase tracking-widest">{label}</span>
+        <span className={cn("text-[11px] font-black text-right truncate max-w-[180px]", muted ? "text-[#618789] font-medium" : "text-[#121617] dark:text-white")}>{value || '---'}</span>
     </div>
 );
 
 const MeterBlock = ({ label, serial, value, type, primary }: { label: string, serial: string, value?: number, type: string, primary?: boolean }) => (
-    <div className={cn(
-        "p-6 rounded-2xl border transition-all duration-300 transform hover:scale-[1.02]",
-        primary
-            ? "bg-primary/5 border-primary/30 ring-4 ring-primary/[0.03] shadow-xl shadow-primary/5"
-            : "bg-[#f9fafa] dark:bg-white/[0.02] border-[#dbe5e6] dark:border-[#2d4546]"
-    )}>
+    <div className={cn("p-6 rounded-2xl border transition-all", primary ? "bg-primary/5 border-primary/30" : "bg-[#f9fafa] dark:bg-white/[0.02] border-[#dbe5e6] dark:border-[#2d4546]")}>
         <p className={cn("text-[9px] font-black uppercase tracking-widest mb-5", primary ? "text-primary" : "text-[#618789]")}>{label}</p>
         <div className="space-y-5">
             <div>
-                <p className="text-[8px] text-[#618789] uppercase font-black tracking-widest mb-1 opacity-50 font-mono">Nro de Serie / ID</p>
+                <p className="text-[8px] text-[#618789] uppercase font-black tracking-widest mb-1 opacity-50">Nro de Serie</p>
                 <div className="flex items-center gap-2">
                     <Hash className={cn("size-3", primary ? "text-primary" : "text-gray-400")} />
-                    <p className={cn("font-mono font-black text-sm tabular-nums tracking-widest px-2 py-0.5 rounded-lg border",
-                        primary ? "bg-primary/10 border-primary/20 text-primary" : "bg-white dark:bg-white/5 border-[#dbe5e6] dark:border-[#2d4546] text-[#121617] dark:text-white")}>
-                        {serial || 'SIN_SERIE'}
-                    </p>
+                    <p className={cn("font-mono font-black text-sm tabular-nums tracking-widest px-2 py-0.5 rounded-lg border", primary ? "bg-primary/10 border-primary/20 text-primary" : "bg-white dark:bg-white/5 border-[#dbe5e6] dark:border-[#2d4546] text-[#121617] dark:text-white")}>{serial || '---'}</p>
                 </div>
             </div>
             <div>
-                <p className="text-[8px] text-[#618789] uppercase font-black tracking-widest mb-1 opacity-50 font-mono">Análisis de Flujo (m³)</p>
-                <p className="text-3xl font-black tabular-nums tracking-tighter">
-                    {value?.toLocaleString(undefined, { minimumFractionDigits: 2 }) || '0.00'}<span className="text-[10px] font-black ml-1 uppercase opacity-30 italic">Vol</span>
-                </p>
+                <p className="text-[8px] text-[#618789] uppercase font-black tracking-widest mb-1 opacity-50">Lectura (m³)</p>
+                <p className="text-3xl font-black tabular-nums tracking-tighter">{value?.toLocaleString(undefined, { minimumFractionDigits: 2 }) || '0.00'}</p>
             </div>
             <div className="pt-2 border-t border-gray-500/5">
-                <span className={cn(
-                    "px-2.5 py-1 rounded-md text-[8px] font-black uppercase tracking-widest inline-flex items-center gap-1.5",
-                    primary ? "bg-primary text-[#121617]" : "bg-[#f1f3f4] dark:bg-white/10 text-[#618789]"
-                )}>
+                <span className={cn("px-2.5 py-1 rounded-md text-[8px] font-black uppercase tracking-widest inline-flex items-center gap-1.5", primary ? "bg-primary text-[#121617]" : "bg-[#f1f3f4] dark:bg-white/10 text-[#618789]")}>
                     <Activity className="size-2.5" />
                     Datos de {type}
                 </span>
@@ -603,75 +730,26 @@ const FieldCheck = ({ label, status, danger }: { label: string, status?: string,
     const s = status?.toUpperCase() || '';
     const isOk = s === 'SI' || s === 'BUENO' || s === 'SI AGENTE' || s === 'ACCEDE';
     const isNeutral = !s || s === '---';
-
     return (
-        <div className={cn(
-            "flex items-center justify-between p-3.5 rounded-xl transition-all border group/check",
-            danger
-                ? "bg-red-500/10 border-red-500/20 shadow-lg shadow-red-500/5"
-                : isOk
-                    ? "bg-green-500/5 border-green-500/10"
-                    : isNeutral
-                        ? "bg-gray-500/5 border-gray-500/10 opacity-60"
-                        : "bg-orange-500/5 border-orange-500/10"
-        )}>
+        <div className={cn("flex items-center justify-between p-3.5 rounded-xl border", danger ? "bg-red-500/10 border-red-500/20" : isOk ? "bg-green-500/5 border-green-500/10" : isNeutral ? "bg-gray-500/5 border-gray-500/10 opacity-60" : "bg-orange-500/5 border-orange-500/10")}>
             <div className="flex items-center gap-3">
-                <div className={cn(
-                    "size-5 rounded-lg flex items-center justify-center transition-all",
-                    danger ? "bg-red-500 text-white animate-pulse" : isOk ? "bg-green-500 text-white" : "bg-gray-200 dark:bg-white/10 text-gray-500"
-                )}>
-                    {danger ? (
-                        <AlertTriangle className="w-3 h-3" />
-                    ) : isOk ? (
-                        <CheckCircle className="w-3 h-3" />
-                    ) : (
-                        <Clock className="w-3 h-3" />
-                    )}
+                <div className={cn("size-5 rounded-lg flex items-center justify-center", danger ? "bg-red-500 text-white" : isOk ? "bg-green-500 text-white" : "bg-gray-200 dark:bg-white/10 text-gray-500")}>
+                    {danger ? <AlertTriangle className="w-3 h-3" /> : isOk ? <CheckCircle className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
                 </div>
-                <span className={cn(
-                    "text-[10px] font-black tracking-widest uppercase",
-                    danger ? "text-red-700 dark:text-red-400 font-black" : isOk ? "text-green-700 dark:text-green-400" : "text-[#618789]"
-                )}>
-                    {label}
-                </span>
+                <span className={cn("text-[10px] font-black uppercase tracking-widest", danger ? "text-red-700 dark:text-red-400" : isOk ? "text-green-700 dark:text-green-400" : "text-[#618789]")}>{label}</span>
             </div>
-            <span className={cn(
-                "text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md border",
-                danger
-                    ? "bg-red-500/20 border-red-500/30 text-red-600"
-                    : isOk
-                        ? "bg-green-500/20 border-green-500/30 text-green-600"
-                        : "bg-gray-500/10 border-gray-500/10 text-gray-400"
-            )}>
-                {status || 'PEND'}
-            </span>
+            <span className={cn("text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md border", danger ? "bg-red-500/20 border-red-500/30 text-red-600" : isOk ? "bg-green-500/20 border-green-500/30 text-green-600" : "bg-gray-500/20 border-gray-500/30 text-gray-500")}>{s || '---'}</span>
         </div>
     );
 };
 
-const StatusBadge = ({ status = '' }: { status?: string }) => {
+const StatusBadge = ({ status }: { status: string }) => {
     const s = status?.toUpperCase();
-    const styles: any = {
-        'PENDIENTE': 'bg-orange-500/10 text-orange-500 border-orange-500/20 shadow-orange-500/10',
-        'VERIFICADO': 'bg-green-500/10 text-green-500 border-green-500/20 shadow-green-500/10',
-        'CERRADO AGENTE': 'bg-blue-500/10 text-blue-500 border-blue-500/20 shadow-blue-500/10',
-        'ASIGNADO': 'bg-cyan-500/10 text-cyan-500 border-cyan-500/20 shadow-cyan-500/10',
-    };
-
-    const badgeStyle = styles[s] || 'bg-gray-500/10 text-gray-500 border-gray-500/20';
-
+    const isClosed = s === 'VERIFICADO' || s === 'CERRADO AGENTE';
     return (
-        <div className="relative group">
-            <div className={cn("absolute -inset-1 rounded-2xl opacity-0 group-hover:opacity-20 blur transition-opacity",
-                s === 'PENDIENTE' ? 'bg-orange-500' : s === 'VERIFICADO' ? 'bg-green-500' : 'bg-primary')}></div>
-            <span className={cn(
-                "relative px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-[0.15em] border shadow-sm transition-all flex items-center gap-2",
-                badgeStyle
-            )}>
-                <span className={cn("size-1.5 rounded-full animate-pulse",
-                    s === 'PENDIENTE' ? 'bg-orange-500' : s === 'VERIFICADO' ? 'bg-green-500' : 'bg-primary')}></span>
-                {status || 'DESCONOCIDO'}
-            </span>
+        <div className={cn("px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border flex items-center gap-2", isClosed ? "bg-green-500/10 border-green-500/20 text-green-600" : "bg-blue-500/10 border-blue-500/20 text-blue-600")}>
+            <div className={cn("size-1.5 rounded-full", isClosed ? "bg-green-500" : "bg-blue-500")} />
+            {status}
         </div>
     );
 };

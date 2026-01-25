@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
@@ -23,8 +23,10 @@ interface Order {
     cliente_calle: string;
     cliente_numero: string;
     estado_nombre: string;
+    id_estado_orden: string;
     created_at: string;
     paso_actual: number;
+    motivo_cierre_nombre?: string;
 }
 
 const AgentDashboard: React.FC = () => {
@@ -44,7 +46,7 @@ const AgentDashboard: React.FC = () => {
 
     const pageSize = 10;
 
-    const fetchDashboardData = async () => {
+    const fetchDashboardData = useCallback(async () => {
         if (!user) return;
         setLoading(true);
 
@@ -70,7 +72,8 @@ const AgentDashboard: React.FC = () => {
                 query = query.in('id_estado_orden', [
                     'b0f48c39-3f90-4690-9144-0fd200a655f3', // PENDIENTE
                     '9cedf5ae-f10c-4412-a617-69646a4ee515',  // ASIGNADO
-                    '60804b07-3287-45b4-b4f2-622884f519d2'   // EN PROCESO
+                    '60804b07-3287-45b4-b4f2-622884f519d2',  // EN PROCESO
+                    '3945416a-775d-412b-b05b-86a582934aaf'   // REASIGNADO
                 ]);
             } else {
                 query = query.eq('id_estado_orden', 'b28d55bb-f885-4cfa-a181-88c1d80ac118'); // CERRADO AGENTE
@@ -89,7 +92,7 @@ const AgentDashboard: React.FC = () => {
                 .range((currentPage - 1) * pageSize, currentPage * pageSize - 1);
 
             if (error) throw error;
-            setOrders(data || []);
+            setOrders(data as unknown as Order[] || []);
             setTotalCount(count || 0);
 
             // 3. Calcular Stats (KPIs)
@@ -99,7 +102,8 @@ const AgentDashboard: React.FC = () => {
                 .eq('id_agente', agentId)
                 .in('id_estado_orden', [
                     'b0f48c39-3f90-4690-9144-0fd200a655f3', // PENDIENTE
-                    '9cedf5ae-f10c-4412-a617-69646a4ee515'  // ASIGNADO
+                    '9cedf5ae-f10c-4412-a617-69646a4ee515',   // ASIGNADO
+                    '3945416a-775d-412b-b05b-86a582934aaf'    // REASIGNADO
                 ]);
 
             const { count: progressCount } = await supabase
@@ -127,12 +131,12 @@ const AgentDashboard: React.FC = () => {
         } finally {
             setLoading(false);
         }
-    };
+    }, [user, activeTab, searchTerm, currentPage, pageSize]);
 
     useEffect(() => {
         const timer = setTimeout(fetchDashboardData, 300);
         return () => clearTimeout(timer);
-    }, [user, searchTerm, currentPage, activeTab]);
+    }, [fetchDashboardData]);
 
     return (
         <div className="p-4 lg:p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500 pb-safe pt-safe">
@@ -212,7 +216,6 @@ const AgentDashboard: React.FC = () => {
                             className="w-full pl-12 pr-4 py-3 bg-white border-gray-200 rounded-2xl text-sm font-medium focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all shadow-sm"
                         />
                     </div>
-                    {/* ... (rest of search/filter area) ... */}
                 </div>
 
                 {/* Mobile View: Cards */}
@@ -256,11 +259,11 @@ const AgentDashboard: React.FC = () => {
                                         <MapPin className="w-3.5 h-3.5" />
                                         <span className="text-xs font-medium">{order.cliente_calle} {order.cliente_numero}</span>
                                     </div>
-                                    {activeTab === 'closed' && (order as any).motivo_cierre_nombre && (
+                                    {activeTab === 'closed' && order.motivo_cierre_nombre && (
                                         <div className="mt-2 py-1.5 px-3 bg-gray-100 rounded-lg inline-flex items-center gap-2">
                                             <div className="w-1 h-1 bg-gray-400 rounded-full"></div>
                                             <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">
-                                                {(order as any).motivo_cierre_nombre}
+                                                {order.motivo_cierre_nombre}
                                             </span>
                                         </div>
                                     )}
@@ -302,12 +305,12 @@ const AgentDashboard: React.FC = () => {
                             {loading ? (
                                 [...Array(3)].map((_, i) => (
                                     <tr key={i} className="animate-pulse">
-                                        <td colSpan={4} className="px-6 py-8"><div className="h-4 bg-gray-100 rounded-lg w-full"></div></td>
+                                        <td colSpan={5} className="px-6 py-8"><div className="h-4 bg-gray-100 rounded-lg w-full"></div></td>
                                     </tr>
                                 ))
                             ) : orders.length === 0 ? (
                                 <tr>
-                                    <td colSpan={4} className="px-6 py-20 text-center text-gray-400 font-bold">No se encontraron órdenes</td>
+                                    <td colSpan={5} className="px-6 py-20 text-center text-gray-400 font-bold">No se encontraron órdenes</td>
                                 </tr>
                             ) : (
                                 orders.map((order) => (
@@ -342,7 +345,7 @@ const AgentDashboard: React.FC = () => {
                                         {activeTab === 'closed' && (
                                             <td className="px-6 py-6">
                                                 <span className="text-xs font-bold text-gray-600">
-                                                    {(order as any).motivo_cierre_nombre || '---'}
+                                                    {order.motivo_cierre_nombre || '---'}
                                                 </span>
                                             </td>
                                         )}
@@ -403,7 +406,15 @@ const AgentDashboard: React.FC = () => {
     );
 };
 
-const StatCard = ({ label, value, icon: Icon, color, lightColor }: any) => (
+interface StatCardProps {
+    label: string;
+    value: number;
+    icon: React.ElementType;
+    color: string;
+    lightColor: string;
+}
+
+const StatCard = ({ label, value, icon: Icon, color, lightColor }: StatCardProps) => (
     <div className="bg-white p-6 rounded-3xl shadow-xl shadow-black/5 border border-gray-100 flex items-center justify-between group hover:border-blue-200 transition-all">
         <div className="space-y-1">
             <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none">{label}</p>

@@ -27,12 +27,25 @@ export const Login = () => {
             if (authError) throw authError;
 
             if (data.session) {
+                // Check if user is active in our custom records
+                const { data: userData, error: userError } = await supabase
+                    .from('t_usuarios')
+                    .select('activo')
+                    .eq('auth_user_id', data.session.user.id)
+                    .single();
+
+                if (userError || (userData && !userData.activo)) {
+                    await supabase.auth.signOut();
+                    throw new Error('Su cuenta ha sido desactivada. Por favor, contacte con el administrador.');
+                }
+
                 setSession(data.session);
                 navigate('/');
             }
-        } catch (err: any) {
-            setError(err.message || 'Error al iniciar sesión. Por favor, intenta de nuevo.');
-            console.error('Login error:', err);
+        } catch (err: unknown) {
+            const error = err as Error;
+            setError(error.message || 'Error al iniciar sesión. Por favor, intenta de nuevo.');
+            console.error('Login error:', error);
         } finally {
             setLoading(false);
         }

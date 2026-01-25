@@ -22,7 +22,8 @@ import {
     Eye
 } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { useToast } from '../hooks/useToast';
 
 interface Order {
     id_orden: number;
@@ -38,6 +39,7 @@ interface Order {
     agente_nombre: string;
     agente_apellido: string;
     agente_email: string;
+    total_count?: string;
 }
 
 interface Agent {
@@ -47,6 +49,8 @@ interface Agent {
 }
 
 export const Orders = () => {
+    const navigate = useNavigate();
+    const toast = useToast();
     const [orders, setOrders] = useState<Order[]>([]);
     const [loading, setLoading] = useState(true);
     const [agents, setAgents] = useState<Agent[]>([]);
@@ -78,7 +82,7 @@ export const Orders = () => {
         completedToday: 0
     });
 
-    const fetchFilterAndStats = async () => {
+    const fetchFilterAndStats = useCallback(async () => {
         setFetchingAgents(true);
         try {
             // 1. Fetch Agents via RPC
@@ -109,8 +113,8 @@ export const Orders = () => {
             setStats(prev => ({
                 ...prev,
                 total: totalCount || 0,
-                assigned: (assignedData as any)?.length || 0,
-                pending: (pendingData as any)?.length || 0
+                assigned: assignedData?.length || 0,
+                pending: pendingData?.length || 0
             }));
 
         } catch (err) {
@@ -118,7 +122,7 @@ export const Orders = () => {
         } finally {
             setFetchingAgents(false);
         }
-    };
+    }, [supabase]);
 
     const fetchOrders = useCallback(async () => {
         setLoading(true);
@@ -137,18 +141,19 @@ export const Orders = () => {
             setOrders(data || []);
 
             if (data && data.length > 0 && data[0].total_count) {
-                setStats(prev => ({ ...prev, total: parseInt(data[0].total_count) }));
+                setStats(prev => ({ ...prev, total: parseInt(data[0].total_count || '0') }));
             }
-        } catch (err: any) {
-            console.error('Error in fetchOrders:', err);
+        } catch (err: unknown) {
+            const error = err as Error;
+            console.error('Error in fetchOrders:', error);
         } finally {
             setLoading(false);
         }
-    }, [searchTerm, selectedStatus, selectedAgent, minStreetNum, maxStreetNum, currentPage]);
+    }, [searchTerm, selectedStatus, selectedAgent, minStreetNum, maxStreetNum, currentPage, pageSize]);
 
     useEffect(() => {
         fetchFilterAndStats();
-    }, []);
+    }, [fetchFilterAndStats]);
 
     useEffect(() => {
         const timer = setTimeout(fetchOrders, 400);
@@ -183,6 +188,8 @@ export const Orders = () => {
 
             // 3. Success Workflow
             setAssignmentSuccess(true);
+            toast.success('Asignación Completada', `Se han asignado ${selectedIds.length} órdenes correctamente.`);
+
             setTimeout(() => {
                 setAssignmentSuccess(false);
                 setShowAssignModal(false);
@@ -194,7 +201,7 @@ export const Orders = () => {
 
         } catch (err) {
             console.error('Error in bulk assignment:', err);
-            alert('Failed to assign orders. Please try again.');
+            toast.error('Error de Asignación', 'No se pudieron asignar las órdenes. Intente nuevamente.');
         } finally {
             setAssigningLoading(false);
         }
@@ -340,8 +347,85 @@ export const Orders = () => {
                     </div>
                 </div>
 
-                {/* Improved Table with Selection */}
-                <div className="overflow-x-auto">
+                {/* Mobile View: Cards */}
+                <div className="md:hidden divide-y divide-[#dde2e4] dark:divide-white/10">
+                    {loading ? (
+                        [...Array(pageSize)].map((_, i) => (
+                            <div key={i} className="p-4 animate-pulse space-y-3">
+                                <div className="h-4 bg-gray-100 dark:bg-white/5 rounded w-1/3"></div>
+                                <div className="h-4 bg-gray-100 dark:bg-white/5 rounded w-full"></div>
+                                <div className="h-10 bg-gray-100 dark:bg-white/5 rounded w-full"></div>
+                            </div>
+                        ))
+                    ) : orders.length === 0 ? (
+                        <div className="p-12 text-center text-[#677c83]">
+                            <Package className="w-10 h-10 mx-auto mb-2 opacity-20" />
+                            <p className="text-sm font-bold">No matching records found.</p>
+                        </div>
+                    ) : (
+                        orders.map((order) => (
+                            <div
+                                key={order.id_orden}
+                                className={cn(
+                                    "p-4 space-y-4 transition-colors",
+                                    selectedIds.includes(order.id_orden) && "bg-primary/[0.04]"
+                                )}
+                                onClick={() => toggleSelectRow(order.id_orden)}
+                            >
+                                <div className="flex justify-between items-start">
+                                    <div className="flex items-center gap-3">
+                                        <input
+                                            type="checkbox"
+                                            className="rounded border-[#dde2e4] text-primary focus:ring-primary/20 cursor-pointer"
+                                            checked={selectedIds.includes(order.id_orden)}
+                                            onChange={(e) => { e.stopPropagation(); toggleSelectRow(order.id_orden); }}
+                                        />
+                                        <Link
+                                            to={`/ordenes/${order.id_orden}`}
+                                            className="text-xs font-black text-primary font-mono bg-primary/10 px-2 py-1 rounded"
+                                            onClick={(e) => e.stopPropagation()}
+                                        >
+                                            #{order.id_orden}
+                                        </Link>
+                                    </div>
+                                    <StatusBadge status={order.estado_nombre} />
+                                </div>
+
+                                <div className="space-y-2">
+                                    <p className="text-sm font-black text-[#121617] dark:text-white uppercase">
+                                        {order.cliente_nombre} {order.cliente_apellido}
+                                    </p>
+                                    <div className="flex items-center gap-2 text-[#677c83]">
+                                        <MapPin className="w-3.5 h-3.5" />
+                                        <span className="text-xs font-medium">{order.cliente_calle} {order.cliente_numero}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2 text-[#677c83]">
+                                        <Cpu className="w-3.5 h-3.5" />
+                                        <span className="text-xs font-medium">Meter: {order.cliente_medidor || '---'}</span>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center justify-between pt-2">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-[8px] font-bold text-primary">
+                                            {order.agente_nombre?.[0] || 'A'}
+                                        </div>
+                                        <span className="text-[10px] font-bold text-[#677c83]">{order.agente_nombre || 'Unassigned'}</span>
+                                    </div>
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); navigate(`/ordenes/${order.id_orden}`); }}
+                                        className="p-2 hover:bg-primary/10 rounded-xl text-primary transition-all"
+                                    >
+                                        <Eye className="w-5 h-5" />
+                                    </button>
+                                </div>
+                            </div>
+                        ))
+                    )}
+                </div>
+
+                {/* Improved Table with Selection - Hidden on Mobile */}
+                <div className="hidden md:block overflow-x-auto">
                     <table className="w-full text-left border-collapse min-w-[1050px]">
                         <thead>
                             <tr className="bg-[#f9fafa] dark:bg-white/2 border-b border-[#dde2e4] dark:border-white/10">
@@ -591,7 +675,14 @@ export const Orders = () => {
     );
 };
 
-const StatCard = ({ icon: Icon, label, value, color }: any) => (
+interface StatCardProps {
+    icon: React.ElementType;
+    label: string;
+    value: string;
+    color: 'orange' | 'green' | 'teal' | 'primary';
+}
+
+const StatCard = ({ icon: Icon, label, value, color }: StatCardProps) => (
     <div className="bg-white dark:bg-[#2d3238] p-6 rounded-2xl border border-[#dde2e4] dark:border-white/10 shadow-sm relative overflow-hidden group hover:border-primary/50 transition-all">
         <div className={cn(
             "absolute -top-4 -right-4 p-8 opacity-[0.03] group-hover:opacity-[0.1] transition-all",
@@ -617,7 +708,7 @@ const StatCard = ({ icon: Icon, label, value, color }: any) => (
 
 const StatusBadge = ({ status = '' }: { status?: string }) => {
     const s = status?.toUpperCase();
-    const styles: any = {
+    const styles: Record<string, string> = {
         'PENDIENTE': 'bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-400 border-orange-200 dark:border-orange-500/30',
         'VERIFICADO': 'bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400 border-green-200 dark:border-green-500/30',
         'ASIGNADO': 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400 border-blue-200 dark:border-blue-500/30',

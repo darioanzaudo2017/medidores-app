@@ -1,0 +1,91 @@
+﻿
+> medidores_app@0.0.0 lint
+> eslint .
+
+
+C:\Users\dario\.gemini\antigravity\scratch\medidores_app\src\components\AgentMap.tsx
+  19:13  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\dario\.gemini\antigravity\scratch\medidores_app\src\pages\AdminDashboard.tsx
+   32:62  error    Unexpected any. Specify a different type                                                                               @typescript-eslint/no-explicit-any
+   33:52  error    Unexpected any. Specify a different type                                                                               @typescript-eslint/no-explicit-any
+   35:56  error    Unexpected any. Specify a different type                                                                               @typescript-eslint/no-explicit-any
+   46:8   warning  React Hook useEffect has a missing dependency: 'fetchDashboardData'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+   92:52  error    Unexpected any. Specify a different type                                                                               @typescript-eslint/no-explicit-any
+   95:63  error    Unexpected any. Specify a different type                                                                               @typescript-eslint/no-explicit-any
+   97:62  error    Unexpected any. Specify a different type                                                                               @typescript-eslint/no-explicit-any
+  127:30  error    Unexpected any. Specify a different type                                                                               @typescript-eslint/no-explicit-any
+  542:62  error    Unexpected any. Specify a different type                                                                               @typescript-eslint/no-explicit-any
+
+C:\Users\dario\.gemini\antigravity\scratch\medidores_app\src\pages\AgentDashboard.tsx
+  137:8   warning  React Hook useEffect has a missing dependency: 'fetchDashboardData'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  261:74  error    Unexpected any. Specify a different type                                                                               @typescript-eslint/no-explicit-any
+  265:60  error    Unexpected any. Specify a different type                                                                               @typescript-eslint/no-explicit-any
+  347:64  error    Unexpected any. Specify a different type                                                                               @typescript-eslint/no-explicit-any
+  408:68  error    Unexpected any. Specify a different type                                                                               @typescript-eslint/no-explicit-any
+
+C:\Users\dario\.gemini\antigravity\scratch\medidores_app\src\pages\Clients.tsx
+   28:44  error    Unexpected any. Specify a different type                                                                         @typescript-eslint/no-explicit-any
+   67:8   warning  React Hook useEffect has a missing dependency: 'fetchClients'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+   90:22  error    'e' is defined but never used                                                                                    @typescript-eslint/no-unused-vars
+  104:32  error    Unexpected any. Specify a different type                                                                         @typescript-eslint/no-explicit-any
+  109:37  error    Unexpected any. Specify a different type                                                                         @typescript-eslint/no-explicit-any
+  141:23  error    Unexpected any. Specify a different type                                                                         @typescript-eslint/no-explicit-any
+
+C:\Users\dario\.gemini\antigravity\scratch\medidores_app\src\pages\Login.tsx
+  33:23  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\dario\.gemini\antigravity\scratch\medidores_app\src\pages\OrderDetail.tsx
+  137:8   warning  React Hook useEffect has a missing dependency: 'fetchOrderData'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  214:23  error    Unexpected any. Specify a different type                                                                           @typescript-eslint/no-explicit-any
+  671:92  error    Unexpected any. Specify a different type                                                                           @typescript-eslint/no-explicit-any
+
+C:\Users\dario\.gemini\antigravity\scratch\medidores_app\src\pages\OrderExecution.tsx
+   100:50   error    Unexpected any. Specify a different type                                                                              @typescript-eslint/no-explicit-any
+   101:35   error    Unexpected any. Specify a different type                                                                              @typescript-eslint/no-explicit-any
+   179:8    warning  React Hook useEffect has a missing dependency: 'fetchOrderDetails'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+   183:48   error    Unexpected any. Specify a different type                                                                              @typescript-eslint/no-explicit-any
+   270:23   error    Unexpected any. Specify a different type                                                                              @typescript-eslint/no-explicit-any
+   281:44   error    Unexpected any. Specify a different type                                                                              @typescript-eslint/no-explicit-any
+   304:23   error    Unexpected any. Specify a different type                                                                              @typescript-eslint/no-explicit-any
+   449:30   error    Unexpected any. Specify a different type                                                                              @typescript-eslint/no-explicit-any
+   460:22   error    Unexpected any. Specify a different type                                                                              @typescript-eslint/no-explicit-any
+   552:54   error    Unexpected any. Specify a different type                                                                              @typescript-eslint/no-explicit-any
+   696:19   error    Unexpected any. Specify a different type                                                                              @typescript-eslint/no-explicit-any
+   697:19   error    Unexpected any. Specify a different type                                                                              @typescript-eslint/no-explicit-any
+   698:19   error    Unexpected any. Specify a different type                                                                              @typescript-eslint/no-explicit-any
+   753:51   error    Unexpected any. Specify a different type                                                                              @typescript-eslint/no-explicit-any
+   770:87   error    Unexpected any. Specify a different type                                                                              @typescript-eslint/no-explicit-any
+   840:185  error    Unexpected any. Specify a different type                                                                              @typescript-eslint/no-explicit-any
+   868:38   error    Unexpected any. Specify a different type                                                                              @typescript-eslint/no-explicit-any
+   939:45   error    Unexpected any. Specify a different type                                                                              @typescript-eslint/no-explicit-any
+  1007:49   error    Unexpected any. Specify a different type                                                                              @typescript-eslint/no-explicit-any
+
+C:\Users\dario\.gemini\antigravity\scratch\medidores_app\src\pages\Orders.tsx
+  114:44  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  115:42  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  144:23  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  598:56  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  624:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\dario\.gemini\antigravity\scratch\medidores_app\src\pages\Users.tsx
+   60:57  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  300:21  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  319:26  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\dario\.gemini\antigravity\scratch\medidores_app\src\pages\VerificationQueue.tsx
+  212:28  error    Unexpected any. Specify a different type                                                                           @typescript-eslint/no-explicit-any
+  250:8   warning  React Hook useEffect has a missing dependency: 'fetchQueueData'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  553:77  error    Unexpected any. Specify a different type                                                                           @typescript-eslint/no-explicit-any
+
+C:\Users\dario\.gemini\antigravity\scratch\medidores_app\src\store\useAuthStore.ts
+  41:13  error  Use "@ts-expect-error" instead of "@ts-ignore", as "@ts-ignore" will do nothing if the following line is error-free  @typescript-eslint/ban-ts-comment
+
+C:\Users\dario\.gemini\antigravity\scratch\medidores_app\src\store\useNotificationStore.ts
+  125:18  error  'e' is defined but never used  @typescript-eslint/no-unused-vars
+
+C:\Users\dario\.gemini\antigravity\scratch\medidores_app\src\types\notification.ts
+  11:31  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+Γ£û 58 problems (52 errors, 6 warnings)
+

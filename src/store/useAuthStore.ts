@@ -38,7 +38,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
             if (error) throw error
 
-            // @ts-ignore - Handle nested relation type
+            // @ts-expect-error - Handle nested relation type
             const roleName = data?.t_tipos_usuario?.nombre ?? null
             set({ role: roleName })
         } catch (error) {

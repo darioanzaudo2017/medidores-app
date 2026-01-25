@@ -9,14 +9,16 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
+      includeAssets: ['vite.svg', 'apple-touch-icon.png', 'icon-192.png', 'icon-512.png'],
       manifest: {
-        name: 'Medidores App',
+        name: 'Utility Services Medidores',
         short_name: 'Medidores',
-        description: 'Gestión de medidores para agentes de campo',
+        description: 'Gestión de medidores para agentes de campo y supervisión',
         theme_color: '#1e293b',
         background_color: '#ffffff',
         display: 'standalone',
+        orientation: 'portrait',
+        scope: '/',
         start_url: '/',
         icons: [
           {

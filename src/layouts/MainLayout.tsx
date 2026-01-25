@@ -11,13 +11,14 @@ import {
     X,
     ChevronRight,
     MapPin,
-    Bell,
     Search,
     Bolt,
     CheckCircle
 } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore';
 import { cn } from '../lib/utils';
+import { NotificationBell } from '../components/notifications/NotificationBell';
+import { ToastContainer } from '../components/toast/ToastContainer';
 
 interface SidebarItemProps {
     icon: React.ElementType;
@@ -150,9 +151,7 @@ export const MainLayout = () => {
                     </div>
 
                     <div className="flex items-center gap-2 lg:gap-4">
-                        <button className="w-10 h-10 flex items-center justify-center rounded-lg hover:bg-[#f1f3f4] dark:hover:bg-white/5 text-[#677c83]">
-                            <Bell className="w-5 h-5" />
-                        </button>
+                        <NotificationBell />
                         <button className="w-10 h-10 flex items-center justify-center rounded-lg hover:bg-[#f1f3f4] dark:hover:bg-white/5 text-[#677c83]">
                             <Settings className="w-5 h-5" />
                         </button>
@@ -199,23 +198,28 @@ export const MainLayout = () => {
                             </div>
                             <button
                                 onClick={() => setIsMobileOpen(false)}
-                                className="p-1.5 rounded-md hover:bg-[#f1f3f4] dark:hover:bg-white/5 text-[#677c83]"
+                                className="p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-white/5 text-gray-500 transition-colors"
                             >
                                 <X className="w-6 h-6" />
                             </button>
                         </div>
+
                         <nav className="space-y-1">
                             {filteredMenuItems.map((item) => (
                                 <SidebarItem
                                     key={item.href}
                                     {...item}
                                     active={location.pathname === item.href}
+                                    collapsed={false}
                                 />
                             ))}
                         </nav>
                     </div>
                 </div>
             )}
+
+            {/* Toast Container */}
+            <ToastContainer />
         </div>
     );
 };
