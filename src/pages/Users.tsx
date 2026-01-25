@@ -140,10 +140,10 @@ export const Users = () => {
             {/* Page Heading & Actions */}
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
                 <div className="space-y-1">
-                    <h1 className="text-4xl font-black tracking-tight text-[#121617] dark:text-white">Users</h1>
+                    <h1 className="text-4xl font-black tracking-tight text-[#121617] dark:text-white">Usuarios</h1>
                     <p className="text-[#688182] dark:text-gray-400 font-medium flex items-center gap-2">
                         <span className="w-2 h-2 rounded-full bg-primary"></span>
-                        {stats.total.toLocaleString()} Total Staff Members
+                        {stats.total.toLocaleString()} Miembros del Personal Total
                     </p>
                 </div>
                 <div className="flex items-center gap-3">
@@ -152,14 +152,14 @@ export const Users = () => {
                         className="flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-[#2d3238] border border-[#dde3e4] dark:border-white/10 rounded-xl font-bold text-sm hover:bg-gray-50 dark:hover:bg-white/5 transition-all"
                     >
                         <Download className="w-5 h-5" />
-                        Export CSV
+                        Exportar CSV
                     </button>
                     <button
                         onClick={() => toast.info('Nuevo Usuario', 'El formulario para crear nuevos usuarios está en desarrollo.')}
                         className="flex items-center gap-2 px-6 py-2.5 bg-primary text-white rounded-xl font-bold text-sm hover:bg-primary/90 shadow-lg shadow-primary/20 transition-all"
                     >
                         <UserPlus className="w-5 h-5" />
-                        Add User
+                        Agregar Usuario
                     </button>
                 </div>
             </div>
@@ -173,19 +173,19 @@ export const Users = () => {
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                             className="w-full pl-12 pr-4 py-3 bg-[#f1f4f4] dark:bg-white/5 border-none rounded-xl text-base focus:ring-2 focus:ring-primary/20 outline-none transition-all"
-                            placeholder="Search by name, email, or legajo (Staff ID)..."
+                            placeholder="Buscar por nombre, email o legajo..."
                             type="text"
                         />
                     </div>
                     <div className="flex flex-wrap items-center gap-3">
                         <button className="flex items-center gap-2 px-4 py-3 bg-[#f1f4f4] dark:bg-white/5 rounded-xl text-sm font-semibold hover:bg-gray-200 dark:hover:bg-white/10 transition-colors">
                             <Filter className="text-gray-500 w-4 h-4" />
-                            All User Types
+                            Todos los Roles
                             <ChevronDown className="w-4 h-4" />
                         </button>
                         <button className="flex items-center gap-2 px-4 py-3 bg-[#f1f4f4] dark:bg-white/5 rounded-xl text-sm font-semibold hover:bg-gray-200 dark:hover:bg-white/10 transition-colors">
                             <Activity className="text-gray-500 w-4 h-4" />
-                            Status: All
+                            Estado: Todos
                             <ChevronDown className="w-4 h-4" />
                         </button>
                         <div className="h-10 w-[1px] bg-gray-200 dark:bg-white/10 mx-2 hidden xl:block"></div>
@@ -215,7 +215,7 @@ export const Users = () => {
                             </div>
                         ))
                     ) : filteredUsers.length === 0 ? (
-                        <div className="p-12 text-center text-gray-500">No matching users found.</div>
+                        <div className="p-12 text-center text-gray-500">No se encontraron usuarios que coincidan.</div>
                     ) : (
                         filteredUsers.map((user) => (
                             <div key={user.usuario_id} className="p-4 space-y-4">
@@ -239,8 +239,8 @@ export const Users = () => {
 
                                 <div className="flex items-center justify-between bg-[#f1f4f4] dark:bg-white/5 p-3 rounded-xl">
                                     <div className="space-y-1">
-                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none">Status</p>
-                                        <p className="text-xs font-bold text-[#121617] dark:text-white uppercase">{user.activo ? 'Active' : 'Inactive'}</p>
+                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none">Estado</p>
+                                        <p className="text-xs font-bold text-[#121617] dark:text-white uppercase">{user.activo ? 'Activo' : 'Inactivo'}</p>
                                     </div>
                                     <label className="relative inline-flex items-center cursor-pointer">
                                         <input
@@ -255,7 +255,7 @@ export const Users = () => {
 
                                 <div className="flex items-center justify-between text-xs font-medium text-[#688182]">
                                     <span>Legajo: {user.legajo || 'N/A'}</span>
-                                    <span>{user.telefono || 'No phone'}</span>
+                                    <span>{user.telefono || 'Sin teléfono'}</span>
                                 </div>
                             </div>
                         ))
@@ -267,12 +267,12 @@ export const Users = () => {
                     <table className="w-full text-left border-collapse min-w-[1000px]">
                         <thead>
                             <tr className="bg-gray-50 dark:bg-white/2 border-b border-[#dde2e4] dark:border-white/10">
-                                <th className="px-6 py-4 text-xs font-extrabold text-[#688182] uppercase tracking-widest">User Details</th>
-                                <th className="px-6 py-4 text-xs font-extrabold text-[#688182] uppercase tracking-widest">Staff ID (Legajo)</th>
-                                <th className="px-6 py-4 text-xs font-extrabold text-[#688182] uppercase tracking-widest">Contact</th>
-                                <th className="px-6 py-4 text-xs font-extrabold text-[#688182] uppercase tracking-widest">Role</th>
-                                <th className="px-6 py-4 text-xs font-extrabold text-[#688182] uppercase tracking-widest text-center">Status</th>
-                                <th className="px-6 py-4 text-xs font-extrabold text-[#688182] uppercase tracking-widest text-right">Actions</th>
+                                <th className="px-6 py-4 text-xs font-extrabold text-[#688182] uppercase tracking-widest">Detalles del Usuario</th>
+                                <th className="px-6 py-4 text-xs font-extrabold text-[#688182] uppercase tracking-widest">Legajo</th>
+                                <th className="px-6 py-4 text-xs font-extrabold text-[#688182] uppercase tracking-widest">Contacto</th>
+                                <th className="px-6 py-4 text-xs font-extrabold text-[#688182] uppercase tracking-widest">Rol</th>
+                                <th className="px-6 py-4 text-xs font-extrabold text-[#688182] uppercase tracking-widest text-center">Estado</th>
+                                <th className="px-6 py-4 text-xs font-extrabold text-[#688182] uppercase tracking-widest text-right">Acciones</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-[#dde2e4] dark:divide-white/10">
@@ -284,7 +284,7 @@ export const Users = () => {
                                 ))
                             ) : filteredUsers.length === 0 ? (
                                 <tr>
-                                    <td colSpan={6} className="px-6 py-20 text-center text-gray-500">No users found matching your search.</td>
+                                    <td colSpan={6} className="px-6 py-20 text-center text-gray-500">No se encontraron usuarios que coincidan con tu búsqueda.</td>
                                 </tr>
                             ) : (
                                 filteredUsers.map((user) => (
@@ -311,7 +311,7 @@ export const Users = () => {
                                             </span>
                                         </td>
                                         <td className="px-6 py-5">
-                                            <p className="text-sm font-medium text-gray-600 dark:text-gray-300">{user.telefono || 'No phone'}</p>
+                                            <p className="text-sm font-medium text-gray-600 dark:text-gray-300">{user.telefono || 'Sin teléfono'}</p>
                                         </td>
                                         <td className="px-6 py-5">
                                             <RoleBadge role={user.rol} />
@@ -342,7 +342,7 @@ export const Users = () => {
                 {/* Pagination */}
                 <div className="px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-[#dde2e4] dark:border-white/10 bg-gray-50 dark:bg-white/2">
                     <p className="text-sm font-medium text-[#688182] dark:text-gray-400">
-                        Showing <span className="text-[#121617] dark:text-white">1 - {filteredUsers.length}</span> of <span className="text-[#121617] dark:text-white">{stats.total}</span> users
+                        Mostrando <span className="text-[#121617] dark:text-white">1 - {filteredUsers.length}</span> de <span className="text-[#121617] dark:text-white">{stats.total}</span> usuarios
                     </p>
                     <div className="flex items-center gap-2">
                         <button className="p-2 rounded-xl border border-[#dde2e4] dark:border-white/10 bg-white dark:bg-white/5 text-gray-500 hover:bg-gray-50 dark:hover:bg-white/10 disabled:opacity-50" disabled>
@@ -360,21 +360,21 @@ export const Users = () => {
             {/* Utility Stats Row */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="bg-primary/5 dark:bg-primary/10 p-6 rounded-2xl border border-primary/20 transition-transform hover:scale-[1.02]">
-                    <p className="text-xs font-bold text-primary uppercase tracking-wider mb-2">Active Agents</p>
+                    <p className="text-xs font-bold text-primary uppercase tracking-wider mb-2">Agentes Activos</p>
                     <div className="flex items-center justify-between">
                         <h3 className="text-3xl font-black text-[#121617] dark:text-white">{stats.agents}</h3>
                         <UserCheck className="w-8 h-8 text-primary opacity-50" />
                     </div>
                 </div>
                 <div className="bg-gray-100/50 dark:bg-white/5 p-6 rounded-2xl border border-[#dde2e4] dark:border-white/10 transition-transform hover:scale-[1.02]">
-                    <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Pending Verification</p>
+                    <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Pendientes de Verificación</p>
                     <div className="flex items-center justify-between">
                         <h3 className="text-3xl font-black text-[#121617] dark:text-white">{stats.pending}</h3>
                         <Clock className="w-8 h-8 text-gray-400 opacity-50" />
                     </div>
                 </div>
                 <div className="bg-gray-100/50 dark:bg-white/5 p-6 rounded-2xl border border-[#dde2e4] dark:border-white/10 transition-transform hover:scale-[1.02]">
-                    <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">System Load</p>
+                    <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Carga del Sistema</p>
                     <div className="flex items-center justify-between">
                         <h3 className="text-3xl font-black text-[#121617] dark:text-white">{stats.systemLoad}%</h3>
                         <div className="w-24 h-2 bg-gray-200 dark:bg-white/10 rounded-full overflow-hidden">

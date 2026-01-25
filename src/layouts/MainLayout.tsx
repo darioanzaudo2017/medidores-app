@@ -87,7 +87,7 @@ export const MainLayout = () => {
                         {!isCollapsed && (
                             <div className="overflow-hidden">
                                 <h1 className="text-base font-bold leading-none truncate">UtilityAdmin</h1>
-                                <p className="text-[#677c83] text-xs font-medium mt-1 truncate">Management Portal</p>
+                                <p className="text-[#677c83] text-xs font-medium mt-1 truncate">Portal de Gestión</p>
                             </div>
                         )}
                     </div>
@@ -107,10 +107,10 @@ export const MainLayout = () => {
                 <div className="p-4 border-t border-[#dde2e4] dark:border-white/10 space-y-4 text-center">
                     {!isCollapsed && (
                         <div className="bg-primary/5 rounded-xl p-4 text-left">
-                            <p className="text-xs font-bold text-primary uppercase tracking-wider mb-2">Support</p>
-                            <p className="text-xs text-[#677c83]">Need help with orders? Contact our help center.</p>
+                            <p className="text-xs font-bold text-primary uppercase tracking-wider mb-2">Soporte</p>
+                            <p className="text-xs text-[#677c83]">¿Necesitás ayuda con las órdenes? Contactanos.</p>
                             <button className="mt-3 text-xs font-bold text-primary flex items-center gap-1 hover:underline">
-                                View Docs <ChevronRight className="w-3 h-3" />
+                                Ver Documentación <ChevronRight className="w-3 h-3" />
                             </button>
                         </div>
                     )}
@@ -122,7 +122,7 @@ export const MainLayout = () => {
                         )}
                     >
                         <LogOut className="w-5 h-5" />
-                        {!isCollapsed && <span>Sign Out</span>}
+                        {!isCollapsed && <span>Cerrar Sesión</span>}
                     </button>
                 </div>
             </aside>
@@ -142,7 +142,7 @@ export const MainLayout = () => {
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#677c83] w-4 h-4" />
                             <input
                                 className="w-full pl-10 pr-4 py-2 bg-[#f1f3f4] dark:bg-white/5 border-none rounded-lg text-sm focus:ring-2 focus:ring-primary/20 placeholder:text-[#677c83] outline-none"
-                                placeholder="Search orders, clients, or IDs..."
+                                placeholder="Buscar órdenes, clientes o IDs..."
                                 type="text"
                             />
                         </div>
@@ -156,8 +156,8 @@ export const MainLayout = () => {
                         <div className="h-8 w-[1px] bg-[#dde2e4] dark:bg-white/10 mx-2"></div>
                         <div className="flex items-center gap-3">
                             <div className="text-right hidden sm:block">
-                                <p className="text-sm font-bold leading-none">{user?.email?.split('@')[0] || 'User'}</p>
-                                <p className="text-[10px] text-[#677c83] font-medium mt-1 uppercase tracking-wider">{role || 'Role'}</p>
+                                <p className="text-sm font-bold leading-none">{user?.email?.split('@')[0] || 'Usuario'}</p>
+                                <p className="text-[10px] text-[#677c83] font-medium mt-1 uppercase tracking-wider">{role || 'Rol'}</p>
                             </div>
                             <div
                                 className="w-10 h-10 rounded-full bg-primary/20 ring-2 ring-primary/20 flex items-center justify-center text-primary font-bold overflow-hidden"
@@ -191,7 +191,7 @@ export const MainLayout = () => {
                                 </div>
                                 <div>
                                     <h1 className="text-base font-bold leading-none">UtilityAdmin</h1>
-                                    <p className="text-[#677c83] text-xs font-medium mt-1">Management Portal</p>
+                                    <p className="text-[#677c83] text-xs font-medium mt-1">Portal de Gestión</p>
                                 </div>
                             </div>
                             <button

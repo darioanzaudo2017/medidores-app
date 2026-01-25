@@ -64,8 +64,8 @@ export const Login = () => {
                         </svg>
                     </div>
                     <div className="text-center">
-                        <h1 className="text-[#121617] dark:text-white text-2xl font-bold tracking-tight">Utility Admin Portal</h1>
-                        <p className="text-[#677c83] dark:text-gray-400 text-sm mt-1">Enterprise Service Management System</p>
+                        <h1 className="text-[#121617] dark:text-white text-2xl font-bold tracking-tight">Portal de Gestión Operativa</h1>
+                        <p className="text-[#677c83] dark:text-gray-400 text-sm mt-1">Sistema de Administración de Servicios</p>
                     </div>
                 </div>
 
@@ -73,8 +73,8 @@ export const Login = () => {
                 <div className="bg-white dark:bg-[#2d3238] rounded-xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-[#dde2e4] dark:border-gray-700 overflow-hidden">
                     <div className="p-8">
                         <div className="mb-8">
-                            <h2 className="text-[#121617] dark:text-white text-xl font-bold">Welcome Back</h2>
-                            <p className="text-[#677c83] dark:text-gray-400 text-sm mt-1">Please enter your details to sign in.</p>
+                            <h2 className="text-[#121617] dark:text-white text-xl font-bold">Bienvenido de nuevo</h2>
+                            <p className="text-[#677c83] dark:text-gray-400 text-sm mt-1">Por favor, ingresá tus datos para iniciar sesión.</p>
                         </div>
 
                         {/* Error State */}
@@ -88,7 +88,7 @@ export const Login = () => {
                         <form className="space-y-5" onSubmit={handleLogin}>
                             {/* Email Field */}
                             <div className="flex flex-col gap-2">
-                                <label className="text-[#121617] dark:text-gray-200 text-sm font-semibold leading-none">Email Address</label>
+                                <label className="text-[#121617] dark:text-gray-200 text-sm font-semibold leading-none">Correo Electrónico</label>
                                 <div className="relative">
                                     <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-[#677c83] dark:text-gray-500 text-xl">mail</span>
                                     <input
@@ -105,8 +105,8 @@ export const Login = () => {
                             {/* Password Field */}
                             <div className="flex flex-col gap-2">
                                 <div className="flex justify-between items-center">
-                                    <label className="text-[#121617] dark:text-gray-200 text-sm font-semibold leading-none">Password</label>
-                                    <button type="button" className="text-primary text-xs font-semibold hover:underline">Forgot password?</button>
+                                    <label className="text-[#121617] dark:text-gray-200 text-sm font-semibold leading-none">Contraseña</label>
+                                    <button type="button" className="text-primary text-xs font-semibold hover:underline">¿Olvidaste tu contraseña?</button>
                                 </div>
                                 <div className="relative">
                                     <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-[#677c83] dark:text-gray-500 text-xl">lock</span>
@@ -130,7 +130,7 @@ export const Login = () => {
                                     checked={rememberMe}
                                     onChange={(e) => setRememberMe(e.target.checked)}
                                 />
-                                <label className="text-[#677c83] dark:text-gray-400 text-sm cursor-pointer select-none" htmlFor="remember">Remember this device for 30 days</label>
+                                <label className="text-[#677c83] dark:text-gray-400 text-sm cursor-pointer select-none" htmlFor="remember">Recordar este dispositivo por 30 días</label>
                             </div>
 
                             {/* Login Button */}
@@ -139,7 +139,7 @@ export const Login = () => {
                                 type="submit"
                                 disabled={loading}
                             >
-                                <span>{loading ? 'Logging in...' : 'Log In'}</span>
+                                <span>{loading ? 'Iniciando sesión...' : 'Iniciar Sesión'}</span>
                                 {!loading && <span className="material-symbols-outlined text-xl group-hover:translate-x-1 transition-transform">arrow_forward</span>}
                             </button>
                         </form>
@@ -150,11 +150,11 @@ export const Login = () => {
                 <div className="flex flex-col items-center gap-6">
                     <div className="flex items-center gap-2 text-[#677c83] dark:text-gray-500 text-xs font-medium uppercase tracking-widest">
                         <span className="h-px w-8 bg-[#dde2e4] dark:bg-gray-700"></span>
-                        <span>Secure Admin Access</span>
+                        <span>Acceso Seguro de Administración</span>
                         <span className="h-px w-8 bg-[#dde2e4] dark:bg-gray-700"></span>
                     </div>
                     <div className="flex items-center gap-2 opacity-60 grayscale hover:grayscale-0 transition-all duration-300">
-                        <span className="text-[#677c83] dark:text-gray-400 text-xs font-medium">Powered by</span>
+                        <span className="text-[#677c83] dark:text-gray-400 text-xs font-medium">Desarrollado con</span>
                         <div className="flex items-center gap-1.5">
                             <div className="w-5 h-5">
                                 <svg className="text-[#3ecf8e]" fill="none" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">

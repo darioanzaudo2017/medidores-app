@@ -238,8 +238,8 @@ export const Orders = () => {
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                 <div>
-                    <h2 className="text-3xl font-extrabold tracking-tight">Orders Management</h2>
-                    <p className="text-[#677c83] mt-1 font-medium">Bulk processing and service point monitoring.</p>
+                    <h2 className="text-3xl font-extrabold tracking-tight">Gestión de Órdenes</h2>
+                    <p className="text-[#677c83] mt-1 font-medium">Procesamiento masivo y monitoreo de puntos de servicio.</p>
                 </div>
                 <div className="flex items-center gap-3">
                     {selectedIds.length > 0 && (
@@ -248,22 +248,22 @@ export const Orders = () => {
                             className="bg-orange-500 hover:bg-orange-600 text-white px-5 py-3 rounded-xl flex items-center gap-2 text-sm font-bold shadow-lg shadow-orange-500/20 transition-all animate-in slide-in-from-right-4"
                         >
                             <UserCheck className="w-5 h-5" />
-                            Assign {selectedIds.length} Orders
+                            Asignar {selectedIds.length} Órdenes
                         </button>
                     )}
                     <button className="bg-primary hover:bg-primary/90 text-white px-5 py-3 rounded-xl flex items-center gap-2 text-sm font-bold shadow-lg shadow-primary/20 transition-all">
                         <Plus className="w-5 h-5" />
-                        New Order
+                        Nueva Orden
                     </button>
                 </div>
             </div>
 
             {/* Improved Stats Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <StatCard icon={Package} label="Total Orders" value={stats.total.toLocaleString()} color="primary" />
-                <StatCard icon={Clock} label="Pending" value={stats.pending.toLocaleString()} color="orange" />
-                <StatCard icon={UserCheck} label="Assigned" value={stats.assigned.toLocaleString()} color="teal" />
-                <StatCard icon={CheckCircle} label="Completed Today" value={stats.completedToday.toLocaleString()} color="green" />
+                <StatCard icon={Package} label="Total Órdenes" value={stats.total.toLocaleString()} color="primary" />
+                <StatCard icon={Clock} label="Pendientes" value={stats.pending.toLocaleString()} color="orange" />
+                <StatCard icon={UserCheck} label="Asignadas" value={stats.assigned.toLocaleString()} color="teal" />
+                <StatCard icon={CheckCircle} label="Completadas Hoy" value={stats.completedToday.toLocaleString()} color="green" />
             </div>
 
             {/* Advanced Filters */}
@@ -275,7 +275,7 @@ export const Orders = () => {
                             <input
                                 value={searchTerm}
                                 onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-                                placeholder="ID, Name, Street, Meter..."
+                                placeholder="ID, Nombre, Calle, Medidor..."
                                 className="w-full pl-10 pr-4 py-2.5 bg-[#f1f3f4] dark:bg-white/5 border-none rounded-xl text-sm focus:ring-2 focus:ring-primary/20 outline-none"
                             />
                         </div>
@@ -287,7 +287,7 @@ export const Orders = () => {
                                 onChange={(e) => { setSelectedStatus(e.target.value); setCurrentPage(1); }}
                                 className="w-full pl-10 pr-4 py-2.5 bg-[#f1f3f4] dark:bg-white/5 border-none rounded-xl text-sm focus:ring-2 focus:ring-primary/20 appearance-none outline-none cursor-pointer"
                             >
-                                <option value="">All Statuses</option>
+                                <option value="">Todos los Estados</option>
                                 {states.map(s => <option key={s} value={s}>{s}</option>)}
                             </select>
                         </div>
@@ -300,10 +300,10 @@ export const Orders = () => {
                                 className="w-full pl-10 pr-4 py-2.5 bg-[#f1f3f4] dark:bg-white/5 border-none rounded-xl text-sm focus:ring-2 focus:ring-primary/20 appearance-none outline-none cursor-pointer"
                             >
                                 {fetchingAgents ? (
-                                    <option>Loading agents...</option>
+                                    <option>Cargando agentes...</option>
                                 ) : (
                                     <>
-                                        <option value="">Select Agent...</option>
+                                        <option value="">Seleccionar Agente...</option>
                                         {agents.map(a => <option key={a.id} value={a.id}>{a.nombre} {a.apellido}</option>)}
                                     </>
                                 )}
@@ -338,11 +338,11 @@ export const Orders = () => {
                             className="text-xs font-bold text-[#677c83] hover:text-primary flex items-center gap-1.5 transition-colors"
                         >
                             <FilterX className="w-4 h-4" />
-                            Clear Filters ({selectedIds.length} items selected)
+                            Limpiar Filtros ({selectedIds.length} seleccionados)
                         </button>
                         <div className="flex items-center gap-2">
                             <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-                            <span className="text-[10px] font-black text-[#677c83] uppercase tracking-widest tabular-nums font-mono">Real-time DB Active</span>
+                            <span className="text-[10px] font-black text-[#677c83] uppercase tracking-widest tabular-nums font-mono">DB en Tiempo Real Activa</span>
                         </div>
                     </div>
                 </div>
@@ -360,7 +360,7 @@ export const Orders = () => {
                     ) : orders.length === 0 ? (
                         <div className="p-12 text-center text-[#677c83]">
                             <Package className="w-10 h-10 mx-auto mb-2 opacity-20" />
-                            <p className="text-sm font-bold">No matching records found.</p>
+                            <p className="text-sm font-bold">No se encontraron registros.</p>
                         </div>
                     ) : (
                         orders.map((order) => (
@@ -401,7 +401,7 @@ export const Orders = () => {
                                     </div>
                                     <div className="flex items-center gap-2 text-[#677c83]">
                                         <Cpu className="w-3.5 h-3.5" />
-                                        <span className="text-xs font-medium">Meter: {order.cliente_medidor || '---'}</span>
+                                        <span className="text-xs font-medium">Medidor: {order.cliente_medidor || '---'}</span>
                                     </div>
                                 </div>
 
@@ -410,7 +410,7 @@ export const Orders = () => {
                                         <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-[8px] font-bold text-primary">
                                             {order.agente_nombre?.[0] || 'A'}
                                         </div>
-                                        <span className="text-[10px] font-bold text-[#677c83]">{order.agente_nombre || 'Unassigned'}</span>
+                                        <span className="text-[10px] font-bold text-[#677c83]">{order.agente_nombre || 'No asignado'}</span>
                                     </div>
                                     <button
                                         onClick={(e) => { e.stopPropagation(); navigate(`/ordenes/${order.id_orden}`); }}
@@ -438,12 +438,12 @@ export const Orders = () => {
                                     />
                                 </th>
                                 <th className="px-6 py-4 text-xs font-bold text-[#677c83] uppercase tracking-wider">ID</th>
-                                <th className="px-6 py-4 text-xs font-bold text-[#677c83] uppercase tracking-wider">Client & Details</th>
-                                <th className="px-6 py-4 text-xs font-bold text-[#677c83] uppercase tracking-wider">Address / Street</th>
-                                <th className="px-6 py-4 text-xs font-bold text-[#677c83] uppercase tracking-wider">Meter serial</th>
-                                <th className="px-6 py-4 text-xs font-bold text-[#677c83] uppercase tracking-wider">Status</th>
-                                <th className="px-6 py-4 text-xs font-bold text-[#677c83] uppercase tracking-wider">Assigned Agent</th>
-                                <th className="px-6 py-4 text-xs font-bold text-[#677c83] uppercase tracking-wider text-right">Actions</th>
+                                <th className="px-6 py-4 text-xs font-bold text-[#677c83] uppercase tracking-wider">Cliente & Detalles</th>
+                                <th className="px-6 py-4 text-xs font-bold text-[#677c83] uppercase tracking-wider">Domicilio / Calle</th>
+                                <th className="px-6 py-4 text-xs font-bold text-[#677c83] uppercase tracking-wider">Nro Medidor</th>
+                                <th className="px-6 py-4 text-xs font-bold text-[#677c83] uppercase tracking-wider">Estado</th>
+                                <th className="px-6 py-4 text-xs font-bold text-[#677c83] uppercase tracking-wider">Agente Asignado</th>
+                                <th className="px-6 py-4 text-xs font-bold text-[#677c83] uppercase tracking-wider text-right">Acciones</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-[#dde2e4] dark:divide-white/10">
@@ -455,7 +455,7 @@ export const Orders = () => {
                                 ))
                             ) : orders.length === 0 ? (
                                 <tr>
-                                    <td colSpan={8} className="px-6 py-20 text-center text-[#677c83]">No matching records found.</td>
+                                    <td colSpan={8} className="px-6 py-20 text-center text-[#677c83]">No se encontraron registros.</td>
                                 </tr>
                             ) : (
                                 orders.map((order) => (
@@ -489,7 +489,7 @@ export const Orders = () => {
                                                 <span className="text-sm font-black text-[#121617] dark:text-white uppercase truncate max-w-[180px]">
                                                     {order.cliente_nombre} {order.cliente_apellido}
                                                 </span>
-                                                <span className="text-[10px] text-[#677c83] font-bold italic">{order.clase_orden || 'Standard Type'}</span>
+                                                <span className="text-[10px] text-[#677c83] font-bold italic">{order.clase_orden || 'Tipo Estándar'}</span>
                                             </div>
                                         </td>
                                         <td className="px-6 py-4">
@@ -499,7 +499,7 @@ export const Orders = () => {
                                                     <span className="text-sm font-semibold truncate max-w-[200px]">
                                                         {order.cliente_calle} {order.cliente_numero}
                                                     </span>
-                                                    <span className="text-[10px] text-[#677c83]">Property Address</span>
+                                                    <span className="text-[10px] text-[#677c83]">Dirección de Propiedad</span>
                                                 </div>
                                             </div>
                                         </td>
@@ -510,7 +510,7 @@ export const Orders = () => {
                                                 </div>
                                                 <div className="flex flex-col">
                                                     <span className="text-sm font-black tabular-nums">{order.cliente_medidor || '---'}</span>
-                                                    <span className="text-[10px] text-[#677c83] font-medium tracking-tight uppercase">Meter ID</span>
+                                                    <span className="text-[10px] text-[#677c83] font-medium tracking-tight uppercase">ID Medidor</span>
                                                 </div>
                                             </div>
                                         </td>
@@ -523,7 +523,7 @@ export const Orders = () => {
                                                     {order.agente_nombre?.[0] || 'A'}
                                                 </div>
                                                 <div className="flex flex-col">
-                                                    <span className="text-sm font-bold leading-none">{order.agente_nombre || 'Unassigned'}</span>
+                                                    <span className="text-sm font-bold leading-none">{order.agente_nombre || 'No asignado'}</span>
                                                     <span className="text-[10px] text-[#677c83] leading-none mt-1">{order.agente_apellido}</span>
                                                 </div>
                                             </div>
@@ -534,7 +534,7 @@ export const Orders = () => {
                                                     to={`/ordenes/${order.id_orden}`}
                                                     className="p-2 hover:bg-primary/10 rounded-xl text-[#677c83] hover:text-primary transition-all"
                                                     onClick={(e) => e.stopPropagation()}
-                                                    title="View Detail"
+                                                    title="Ver Detalle"
                                                 >
                                                     <Eye className="w-5 h-5" />
                                                 </Link>
@@ -553,7 +553,7 @@ export const Orders = () => {
                 {/* Pagination */}
                 <div className="p-6 bg-[#f9fafa] dark:bg-white/2 border-t border-[#dde2e4] dark:border-white/10 flex flex-col sm:flex-row items-center justify-between gap-4">
                     <p className="text-[10px] font-black text-[#677c83] uppercase tracking-widest tabular-nums">
-                        Displaying {orders.length} of {stats.total} total records
+                        Mostrando {orders.length} de {stats.total} registros totales
                     </p>
                     <div className="flex items-center gap-3">
                         <button
@@ -587,8 +587,8 @@ export const Orders = () => {
                                     <UserCheck className="w-6 h-6" />
                                 </div>
                                 <div>
-                                    <h3 className="text-lg font-black tracking-tight">Bulk Assignment</h3>
-                                    <p className="text-xs text-[#677c83] font-bold uppercase">{selectedIds.length} orders total</p>
+                                    <h3 className="text-lg font-black tracking-tight">Asignación Masiva</h3>
+                                    <p className="text-xs text-[#677c83] font-bold uppercase">{selectedIds.length} órdenes en total</p>
                                 </div>
                             </div>
                             <button
@@ -606,17 +606,17 @@ export const Orders = () => {
                                         <Check className="w-10 h-10" />
                                     </div>
                                     <div>
-                                        <h4 className="text-xl font-black text-[#121617] dark:text-white">Assignment Successful!</h4>
-                                        <p className="text-sm text-[#677c83] font-medium mt-1">Updates are being finalized...</p>
+                                        <h4 className="text-xl font-black text-[#121617] dark:text-white">¡Asignación Exitosa!</h4>
+                                        <p className="text-sm text-[#677c83] font-medium mt-1">Los cambios se están finalizando...</p>
                                     </div>
                                 </div>
                             ) : (
                                 <>
                                     <div className="space-y-4">
-                                        <label className="text-xs font-black text-[#677c83] uppercase tracking-widest pl-1">Target Agent</label>
+                                        <label className="text-xs font-black text-[#677c83] uppercase tracking-widest pl-1">Agente Destino</label>
                                         <div className="grid grid-cols-1 gap-3">
                                             {agents.length === 0 ? (
-                                                <p className="text-sm text-center py-4 text-[#677c83] italic border-2 border-dashed rounded-2xl">No agents found</p>
+                                                <p className="text-sm text-center py-4 text-[#677c83] italic border-2 border-dashed rounded-2xl">No se encontraron agentes</p>
                                             ) : (
                                                 <div className="max-h-[240px] overflow-y-auto pr-2 custom-scrollbar space-y-2">
                                                     {agents.map(agent => (
@@ -638,7 +638,7 @@ export const Orders = () => {
                                                             </div>
                                                             <div className="flex flex-col">
                                                                 <span className="font-bold text-sm">{agent.nombre} {agent.apellido}</span>
-                                                                <span className="text-[10px] text-[#677c83] font-bold uppercase">Ready for assign</span>
+                                                                <span className="text-[10px] text-[#677c83] font-bold uppercase">Listo para asignar</span>
                                                             </div>
                                                             {targetAgentId === agent.id && <Check className="ml-auto w-5 h-5 text-primary" />}
                                                         </button>
@@ -656,12 +656,12 @@ export const Orders = () => {
                                         {assigningLoading ? (
                                             <>
                                                 <Loader2 className="w-5 h-5 animate-spin" />
-                                                Processing...
+                                                Procesando...
                                             </>
                                         ) : (
                                             <>
                                                 <UserCheck className="w-5 h-5" />
-                                                Confirm Assignment
+                                                Confirmar Asignación
                                             </>
                                         )}
                                     </button>

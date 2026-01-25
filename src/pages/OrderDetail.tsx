@@ -1,4 +1,6 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import {
@@ -24,6 +26,7 @@ import {
     Trash2,
     RefreshCw,
     Play,
+    Loader2,
     X
 } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -104,6 +107,43 @@ export const OrderDetail = () => {
     const [photos, setPhotos] = useState<DBPhoto[]>([]);
     const [selectedMedia, setSelectedMedia] = useState<DBPhoto | null>(null);
     const [showReassignModal, setShowReassignModal] = useState(false);
+    const [generatingPDF, setGeneratingPDF] = useState(false);
+    const reportRef = useRef<HTMLDivElement>(null);
+
+    const handleGeneratePDF = async () => {
+        if (!reportRef.current || !order) return;
+
+        try {
+            setGeneratingPDF(true);
+            toast.info('Generando PDF', 'Estamos preparando el documento...');
+
+            // Hide things that shouldn't appear in PDF if any (e.g. tooltips, maps sometimes need special care)
+            const canvas = await html2canvas(reportRef.current, {
+                scale: 2,
+                useCORS: true,
+                logging: false,
+                allowTaint: true,
+                ignoreElements: (element) => {
+                    return element.classList.contains('no-pdf');
+                }
+            });
+
+            const imgData = canvas.toDataURL('image/png');
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+
+            pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+            pdf.save(`Reporte_Orden_${order.id_orden}.pdf`);
+
+            toast.success('PDF Generado', 'El reporte se ha descargado correctamente.');
+        } catch (error) {
+            console.error('Error generating PDF:', error);
+            toast.error('Error', 'No se pudo generar el PDF. Reintente por favor.');
+        } finally {
+            setGeneratingPDF(false);
+        }
+    };
 
     const fetchOrderData = useCallback(async () => {
         if (!id) return;
@@ -247,9 +287,9 @@ export const OrderDetail = () => {
 
     return (
         <div className="flex flex-col min-h-screen bg-background-light dark:bg-background-dark text-[#121617] dark:text-gray-100 transition-colors duration-200 text-left">
-            <main className="flex-1 px-4 lg:px-8 py-8 w-full max-w-7xl mx-auto pb-32">
+            <main ref={reportRef} className="flex-1 px-4 lg:px-8 py-8 w-full max-w-7xl mx-auto pb-32">
                 {/* Breadcrumbs */}
-                <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 mb-6">
+                <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 mb-6 no-pdf">
                     <Link to="/ordenes" className="hover:text-primary transition-colors font-medium">Órdenes</Link>
                     <ChevronRight className="w-4 h-4" />
                     <span className="font-bold text-[#121617] dark:text-white truncate">ORD-{order.id_orden}</span>
@@ -276,10 +316,14 @@ export const OrderDetail = () => {
                             Asignado a: <span className="text-[#121617] dark:text-white font-bold">{order.agente_nombre} {order.agente_apellido}</span>
                         </p>
                     </div>
-                    <div className="flex gap-3 pr-2 font-mono">
-                        <button className="flex items-center gap-2 px-5 py-3 border border-[#dbe5e6] dark:border-[#2d4546] bg-white dark:bg-[#1a2e2f] rounded-xl font-black text-[10px] tracking-widest hover:shadow-lg hover:scale-[1.02] transition-all">
-                            <Printer className="w-4 h-4 text-primary" />
-                            IMPRIMIR REPORTE
+                    <div className="flex gap-3 pr-2 font-mono no-pdf">
+                        <button
+                            onClick={handleGeneratePDF}
+                            disabled={generatingPDF}
+                            className="flex items-center gap-2 px-5 py-3 border border-[#dbe5e6] dark:border-[#2d4546] bg-white dark:bg-[#1a2e2f] rounded-xl font-black text-[10px] tracking-widest hover:shadow-lg hover:scale-[1.02] transition-all disabled:opacity-50"
+                        >
+                            {generatingPDF ? <Loader2 className="w-4 h-4 animate-spin text-primary" /> : <Printer className="w-4 h-4 text-primary" />}
+                            {generatingPDF ? 'GENERANDO...' : 'IMPRIMIR REPORTE'}
                         </button>
                         <button className="flex items-center gap-2 px-5 py-3 bg-white dark:bg-[#1a2e2f] border border-[#dbe5e6] dark:border-[#2d4546] rounded-xl font-black text-[10px] tracking-widest hover:shadow-lg hover:scale-[1.02] transition-all">
                             <History className="w-4 h-4 text-primary" />

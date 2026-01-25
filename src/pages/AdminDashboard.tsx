@@ -237,7 +237,7 @@ const AdminDashboard: React.FC = () => {
                         </div>
                         <div>
                             <h1 className="text-xl font-black tracking-tight text-slate-800">Panel de Control</h1>
-                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Admin Dashboard</p>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Panel de Administración</p>
                         </div>
                     </div>
 
@@ -267,7 +267,7 @@ const AdminDashboard: React.FC = () => {
                         <div className="mb-10 flex flex-col md:flex-row md:items-end justify-between gap-6">
                             <div>
                                 <div className="flex items-center gap-2 text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">
-                                    <span>Dashboard</span>
+                                    <span>Panel</span>
                                     <ChevronRight className="w-3 h-3" />
                                     <span className="text-blue-600">Reportes de Rendimiento</span>
                                 </div>
@@ -438,7 +438,7 @@ const AdminDashboard: React.FC = () => {
                             <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 gap-4">
                                 <div>
                                     <h4 className="text-lg font-black text-slate-800">Resumen de Agentes</h4>
-                                    <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1">Métricas granulares por técnico</p>
+                                    <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1">Métricas detalladas por técnico</p>
                                 </div>
                                 <div className="flex items-center gap-3">
                                     <div className="relative">
