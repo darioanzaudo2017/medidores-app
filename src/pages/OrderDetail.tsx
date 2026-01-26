@@ -161,10 +161,16 @@ export const OrderDetail = () => {
             // Fetch actual photos
             const { data: photosData } = await supabase
                 .from('t_fotos')
-                .select('id, url_foto, video')
-                .eq('orden_id', id);
+                .select('*')
+                .eq('orden_id', parseInt(id!));
 
-            if (photosData) setPhotos(photosData as DBPhoto[]);
+            if (photosData) {
+                const mappedPhotos = photosData.map((p: any) => ({
+                    ...p,
+                    id: p.id || p.id_foto || p.id_fotos || Object.values(p)[0]
+                }));
+                setPhotos(mappedPhotos as DBPhoto[]);
+            }
 
         } catch (err) {
             console.error('Error fetching order details:', err);

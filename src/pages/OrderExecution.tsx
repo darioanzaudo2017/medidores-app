@@ -158,9 +158,17 @@ const OrderExecution: React.FC = () => {
             // Photos
             const { data: photosData } = await supabase
                 .from('t_fotos')
-                .select('id, url_foto, video')
-                .eq('orden_id', id);
-            if (photosData) setPhotos(photosData as DBPhoto[]);
+                .select('*') // Select all to see what IDs we get
+                .eq('orden_id', parseInt(id!));
+
+            if (photosData) {
+                // Map the data to ensure we have an 'id' property even if the column is named differently (e.g. id_foto)
+                const mappedPhotos = photosData.map((p: any) => ({
+                    ...p,
+                    id: p.id || p.id_foto || p.id_fotos || Object.values(p)[0] // Extreme fallback
+                }));
+                setPhotos(mappedPhotos as DBPhoto[]);
+            }
 
         } catch (err) {
             console.error('Error fetching order details:', err);
@@ -354,7 +362,7 @@ const OrderExecution: React.FC = () => {
             const { error: uploadError } = await supabase.storage
                 .from('fotomedidor')
                 .upload(filePath, file, {
-                    contentType: file.type,
+                    contentType: file.type || (isVideo ? 'video/mp4' : 'image/jpeg'),
                     cacheControl: '3600',
                     upsert: false
                 });
@@ -376,7 +384,13 @@ const OrderExecution: React.FC = () => {
                 .single();
 
             if (dbError) throw dbError;
-            setPhotos(prev => [...prev, newPhoto as DBPhoto]);
+
+            // Re-map the new photo to ensure ID consistency
+            const mappedNewPhoto = {
+                ...newPhoto,
+                id: (newPhoto as any).id || (newPhoto as any).id_foto || (newPhoto as any).id_fotos
+            };
+            setPhotos(prev => [...prev, mappedNewPhoto as DBPhoto]);
         } catch (err: any) {
             console.error('Error uploading file:', err);
             const errorMessage = err.message || err.error_description || 'Error desconocido';
