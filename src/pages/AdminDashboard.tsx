@@ -15,8 +15,11 @@ import {
     ClipboardList,
     Star,
     MapPin,
-    CheckCircle
+    CheckCircle,
+    LogOut
 } from 'lucide-react';
+import { useAuthStore } from '../store/useAuthStore';
+import { useNavigate } from 'react-router-dom';
 import { cn } from '../lib/utils';
 import AgentMap from '../components/AgentMap';
 
@@ -80,6 +83,14 @@ const AdminDashboard: React.FC = () => {
         pending: 0,
         total: 0
     });
+
+    const { signOut } = useAuthStore();
+    const navigate = useNavigate();
+
+    const handleSignOut = async () => {
+        await signOut();
+        navigate('/login');
+    };
 
     const fetchDashboardData = useCallback(async () => {
         try {
@@ -254,6 +265,13 @@ const AdminDashboard: React.FC = () => {
                         </div>
                         <button className="p-2.5 bg-gray-50 text-gray-500 rounded-2xl hover:bg-gray-100 transition-colors">
                             <Bell className="w-5 h-5" />
+                        </button>
+                        <button
+                            onClick={handleSignOut}
+                            className="p-2.5 bg-red-50 text-red-500 rounded-2xl hover:bg-red-100 transition-colors"
+                            title="Cerrar Sesión"
+                        >
+                            <LogOut className="w-5 h-5" />
                         </button>
                     </div>
                 </div>

@@ -13,7 +13,8 @@ import {
     ChevronRight,
     AlertCircle,
     Play,
-    Hash
+    Hash,
+    LogOut
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -44,6 +45,12 @@ const AgentDashboard: React.FC = () => {
         inProgress: 0,
         completedToday: 0
     });
+    const { signOut } = useAuthStore();
+
+    const handleSignOut = async () => {
+        await signOut();
+        navigate('/login');
+    };
 
     const pageSize = 10;
 
@@ -152,13 +159,22 @@ const AgentDashboard: React.FC = () => {
                     <h1 className="text-3xl font-black text-gray-900 tracking-tight">Mis Tareas</h1>
                     <p className="text-gray-500 font-medium">Gestiona y ejecuta tus órdenes de trabajo asignadas.</p>
                 </div>
-                <button
-                    onClick={() => fetchDashboardData()}
-                    className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm font-bold text-gray-700 hover:bg-gray-50 transition-all shadow-sm active:scale-95"
-                >
-                    <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
-                    Actualizar
-                </button>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={() => fetchDashboardData()}
+                        className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm font-bold text-gray-700 hover:bg-gray-50 transition-all shadow-sm active:scale-95"
+                    >
+                        <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
+                        Actualizar
+                    </button>
+                    <button
+                        onClick={handleSignOut}
+                        className="flex items-center gap-2 px-4 py-2 bg-red-50 border border-red-100 rounded-xl text-sm font-bold text-red-600 hover:bg-red-100 transition-all shadow-sm active:scale-95"
+                        title="Cerrar Sesión"
+                    >
+                        <LogOut className="w-4 h-4" />
+                    </button>
+                </div>
             </header>
 
             {/* KPI Cards */}
