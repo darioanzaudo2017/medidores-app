@@ -12,7 +12,8 @@ import {
     ChevronLeft,
     ChevronRight,
     AlertCircle,
-    Play
+    Play,
+    Hash
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -22,6 +23,7 @@ interface Order {
     cliente_apellido: string;
     cliente_calle: string;
     cliente_numero: string;
+    cliente_medidor: string;
     estado_nombre: string;
     id_estado_orden: string;
     created_at: string;
@@ -80,12 +82,18 @@ const AgentDashboard: React.FC = () => {
             }
 
             if (searchTerm) {
-                const term = `%${searchTerm.trim()}%`;
-                if (!isNaN(Number(searchTerm)) && searchTerm.trim() !== '') {
-                    query = query.eq('id_orden', Number(searchTerm));
-                } else {
-                    query = query.or(`cliente_nombre.ilike."${term}",cliente_apellido.ilike."${term}",cliente_calle.ilike."${term}"`);
+                const cleanTerm = searchTerm.trim();
+                const term = `%${cleanTerm}%`;
+
+                // Construimos las condiciones de búsqueda
+                let orConditions = `cliente_nombre.ilike.${term},cliente_apellido.ilike.${term},cliente_calle.ilike.${term},cliente_numero.ilike.${term},cliente_medidor.ilike.${term}`;
+
+                // Si es un número, también buscamos por ID de orden
+                if (!isNaN(Number(cleanTerm)) && cleanTerm !== '') {
+                    orConditions += `,id_orden.eq.${cleanTerm}`;
                 }
+
+                query = query.or(orConditions);
             }
 
             const { data, count, error } = await query
@@ -212,7 +220,7 @@ const AgentDashboard: React.FC = () => {
                             type="text"
                             value={searchTerm}
                             onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-                            placeholder="Buscar por número o dirección..."
+                            placeholder="Buscar por nombre, dirección o medidor..."
                             className="w-full pl-12 pr-4 py-3 bg-white border-gray-200 rounded-2xl text-sm font-medium focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all shadow-sm"
                         />
                     </div>
@@ -255,9 +263,15 @@ const AgentDashboard: React.FC = () => {
 
                                 <div className="flex flex-col">
                                     <span className="text-sm font-bold text-gray-900">{order.cliente_nombre} {order.cliente_apellido}</span>
-                                    <div className="flex items-center gap-1.5 mt-1 text-gray-500">
-                                        <MapPin className="w-3.5 h-3.5" />
-                                        <span className="text-xs font-medium">{order.cliente_calle} {order.cliente_numero}</span>
+                                    <div className="flex flex-col gap-1 mt-1">
+                                        <div className="flex items-center gap-1.5 text-gray-500">
+                                            <MapPin className="w-3.5 h-3.5" />
+                                            <span className="text-xs font-medium">{order.cliente_calle} {order.cliente_numero}</span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5 text-[#688182]">
+                                            <Hash className="w-3.5 h-3.5" />
+                                            <span className="text-xs font-bold uppercase tracking-wider">Medidor: {order.cliente_medidor}</span>
+                                        </div>
                                     </div>
                                     {activeTab === 'closed' && order.motivo_cierre_nombre && (
                                         <div className="mt-2 py-1.5 px-3 bg-gray-100 rounded-lg inline-flex items-center gap-2">
@@ -329,6 +343,10 @@ const AgentDashboard: React.FC = () => {
                                                 <div className="flex items-center gap-1.5 mt-1 text-gray-500">
                                                     <MapPin className="w-3.5 h-3.5" />
                                                     <span className="text-xs font-medium">{order.cliente_calle} {order.cliente_numero}</span>
+                                                </div>
+                                                <div className="flex items-center gap-1.5 mt-1 text-[#688182]">
+                                                    <Hash className="w-3.5 h-3.5" />
+                                                    <span className="text-[10px] font-bold uppercase tracking-wider">Medidor: {order.cliente_medidor}</span>
                                                 </div>
                                             </div>
                                         </td>
