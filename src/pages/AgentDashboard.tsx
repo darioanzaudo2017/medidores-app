@@ -20,7 +20,6 @@ import { cn } from '../lib/utils';
 interface Order {
     id_orden: number;
     cliente_nombre: string;
-    cliente_apellido: string;
     cliente_calle: string;
     cliente_numero: string;
     cliente_medidor: string;
@@ -85,8 +84,8 @@ const AgentDashboard: React.FC = () => {
                 const cleanTerm = searchTerm.trim();
                 const term = `%${cleanTerm}%`;
 
-                // Construimos las condiciones de búsqueda
-                let orConditions = `cliente_nombre.ilike.${term},cliente_apellido.ilike.${term},cliente_calle.ilike.${term},cliente_numero.ilike.${term},cliente_medidor.ilike.${term}`;
+                // Construimos las condiciones de búsqueda sin cliente_apellido ya que no existe en la vista
+                let orConditions = `cliente_nombre.ilike.${term},cliente_calle.ilike.${term},cliente_numero.ilike.${term},cliente_medidor.ilike.${term}`;
 
                 // Si es un número, también buscamos por ID de orden
                 if (!isNaN(Number(cleanTerm)) && cleanTerm !== '') {
@@ -262,7 +261,7 @@ const AgentDashboard: React.FC = () => {
                                 </div>
 
                                 <div className="flex flex-col">
-                                    <span className="text-sm font-bold text-gray-900">{order.cliente_nombre} {order.cliente_apellido}</span>
+                                    <span className="text-sm font-bold text-gray-900">{order.cliente_nombre}</span>
                                     <div className="flex flex-col gap-1 mt-1">
                                         <div className="flex items-center gap-1.5 text-gray-500">
                                             <MapPin className="w-3.5 h-3.5" />
@@ -339,7 +338,7 @@ const AgentDashboard: React.FC = () => {
                                         </td>
                                         <td className="px-6 py-6">
                                             <div className="flex flex-col">
-                                                <span className="text-sm font-bold text-gray-900">{order.cliente_nombre} {order.cliente_apellido}</span>
+                                                <span className="text-sm font-bold text-gray-900">{order.cliente_nombre}</span>
                                                 <div className="flex items-center gap-1.5 mt-1 text-gray-500">
                                                     <MapPin className="w-3.5 h-3.5" />
                                                     <span className="text-xs font-medium">{order.cliente_calle} {order.cliente_numero}</span>
