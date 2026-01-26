@@ -19,7 +19,8 @@ import {
     Video,
     Play,
     X,
-    AlertTriangle
+    AlertTriangle,
+    Check
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useToast } from '../hooks/useToast';
@@ -185,14 +186,38 @@ const OrderExecution: React.FC = () => {
 
     const suggestClosureMotive = (ord: OrderData | null): number | null => {
         if (!ord) return null;
-        if (ord.morador === 'NO') return 1;
+
+        // 1. Hay morador NO
+        // Si ya tiene una fecha de primera visita (o ya fue visitado), es la segunda visita (Cierre definitivo)
+        if (ord.morador === 'NO') {
+            return ord.fecha_primera_visita ? 9 : 1;
+        }
+
+        // 2. Cliente accede NO
         if (ord.cliente_accede_cambio === 'NO') return 2;
+
+        // 3. Coincide medidor NO
         if (ord.coincidenummedidor === 'NO') return 3;
+
+        // 4. Gabinete deteriorado SI
         if (ord.medidor_mal_estado === 'SI') return 4;
+
+        // 5. Puede retirar reja NO (si tiene reja)
         if (ord.posee_reja_soldadura === 'SI' && ord.puede_retirar === 'NO') return 5;
-        if (ord.fuga_fuera_zona === 'SI') return 6;
+
+        // 6. Perdida en válvula SI
         if (ord.perdida_valvula === 'SI') return 7;
-        return 8; // Normal
+
+        // 7. Se puede operar válvula NO
+        if (ord.operar_valvula === 'NO') return 10;
+
+        // 8. Perdidas luego operar SI
+        if (ord.continua_perdida_valvula === 'SI') return 11;
+
+        // Caso fuga fuera de zona (opcional, lo mantenemos por consistencia)
+        if (ord.fuga_fuera_zona === 'SI') return 6;
+
+        return 8; // Normal (Continúa a Instalación)
     };
 
     const updateProgress = async (nextStep: number) => {
@@ -266,21 +291,33 @@ const OrderExecution: React.FC = () => {
             setSaving(true);
             await savePendingUpdates();
 
-            // Status 'CERRADO AGENTE'
+            // Determinar estado final: SEGUNDA VISITA o CERRADO AGENTE
+            let targetStatusName = 'CERRADO AGENTE';
+            if (isFirstNoMorador) {
+                targetStatusName = 'SEGUNDA VISITA';
+            }
+
             const { data: statusData } = await supabase
                 .from('t_estados')
                 .select('id')
-                .eq('nombre', 'CERRADO AGENTE')
+                .eq('nombre', targetStatusName)
                 .single();
 
-            if (!statusData) throw new Error('Estado CERRADO AGENTE no encontrado');
+            if (!statusData) throw new Error(`Estado ${targetStatusName} no encontrado`);
+
+            const updateData: any = {
+                id_estado_orden: statusData.id,
+                fecha_finalizacion_agente: new Date().toISOString()
+            };
+
+            // Si es la primera visita sin morador, guardamos la fecha
+            if (isFirstNoMorador) {
+                updateData.fecha_primera_visita = new Date().toISOString();
+            }
 
             const { error } = await supabase
                 .from('t_ordenes')
-                .update({
-                    id_estado_orden: statusData.id,
-                    fecha_finalizacion_agente: new Date().toISOString()
-                })
+                .update(updateData)
                 .eq('id_orden', id);
 
             if (error) throw error;
@@ -618,118 +655,224 @@ const SummaryStep = ({ order }: { order: OrderData }) => (
 );
 
 const InspectionStep = ({ order, onUpdate, readOnly, suggestClosureMotive }: { order: OrderData, onUpdate: (f: keyof OrderData, v: string) => void, readOnly?: boolean, suggestClosureMotive: (ord: OrderData | null) => number | null }) => {
+
+    // Función mejorada de visibilidad según flujograma
     const shouldShow = (field: string): boolean => {
         switch (field) {
             case 'morador':
                 return true;
+
             case 'cliente_accede_cambio':
                 return order.morador === 'SI';
+
             case 'coincidenummedidor':
                 return order.morador === 'SI' && order.cliente_accede_cambio === 'SI';
+
             case 'medidor_mal_estado':
                 return order.morador === 'SI' &&
                     order.cliente_accede_cambio === 'SI' &&
                     order.coincidenummedidor === 'SI';
+
             case 'posee_reja_soldadura':
-                return order.medidor_mal_estado === 'NO';
+                return order.morador === 'SI' &&
+                    order.cliente_accede_cambio === 'SI' &&
+                    order.coincidenummedidor === 'SI' &&
+                    order.medidor_mal_estado === 'NO';
+
             case 'puede_retirar':
                 return order.posee_reja_soldadura === 'SI';
+
             case 'fuga_fuera_zona':
                 return order.medidor_mal_estado === 'NO' &&
                     (order.posee_reja_soldadura === 'NO' || order.puede_retirar === 'SI');
+
             case 'perdida_valvula':
                 return order.fuga_fuera_zona === 'NO';
+
             case 'operar_valvula':
                 return order.fuga_fuera_zona === 'NO' && order.perdida_valvula === 'NO';
+
             case 'continua_perdida_valvula':
                 return order.operar_valvula === 'SI';
+
             default:
                 return false;
         }
     };
 
-    const checklistItems: { field: keyof OrderData, label: string }[] = [
-        { field: 'morador', label: '¿Hay morador presente?' },
-        { field: 'cliente_accede_cambio', label: '¿Cliente Accede a que se realice el cambio?' },
-        { field: 'coincidenummedidor', label: `Coincide con medidor Num: ${order.cliente_medidor}` },
-        { field: 'medidor_mal_estado', label: '¿Gabinete/Medidor Deteriorado o Manipulado?' },
-        { field: 'posee_reja_soldadura', label: '¿Posee reja o soldadura?' },
-        { field: 'puede_retirar', label: '¿Se puede retirar?' },
-        { field: 'fuga_fuera_zona', label: '¿Se detectan fugas fuera de la zona?' },
-        { field: 'perdida_valvula', label: '¿Perdida en válvula?' },
-        { field: 'operar_valvula', label: '¿Se puede operar la válvula?' },
-        { field: 'continua_perdida_valvula', label: '¿Se detectan perdidas luego de operar válvula?' },
+    // Items en el orden correcto según flujograma
+    const checklistItems = [
+        {
+            field: 'morador',
+            label: '¿Hay morador presente?',
+            info: 'Primera pregunta crítica - Si NO hay morador, se programa segunda visita'
+        },
+        {
+            field: 'cliente_accede_cambio',
+            label: '¿Cliente accede a que se realice el cambio?',
+            info: 'Si NO acepta, se cierra la orden por negativa del cliente'
+        },
+        {
+            field: 'coincidenummedidor',
+            label: `Coincide con medidor Num: ${order.cliente_medidor}`,
+            info: 'Verificar que el número de serie del medidor coincida'
+        },
+        {
+            field: 'medidor_mal_estado',
+            label: '¿Gabinete/Medidor deteriorado o manipulado?',
+            info: 'Si está deteriorado, se cierra por mal estado'
+        },
+        {
+            field: 'posee_reja_soldadura',
+            label: '¿Posee reja o soldadura?',
+            info: 'Verificar si hay obstáculos físicos para acceder al medidor'
+        },
+        {
+            field: 'puede_retirar',
+            label: '¿Se puede retirar la reja/soldadura?',
+            info: 'Si NO se puede retirar, se cierra la orden'
+        },
+        {
+            field: 'fuga_fuera_zona',
+            label: '¿Se detectan fugas fuera de la zona de intervención?',
+            info: 'Fugas en tubería antes del medidor'
+        },
+        {
+            field: 'perdida_valvula',
+            label: '¿Pérdida en válvula?',
+            info: 'Verificar si la válvula tiene fugas antes de operar'
+        },
+        {
+            field: 'operar_valvula',
+            label: '¿Se puede operar la válvula?',
+            info: 'Intentar abrir/cerrar la válvula de paso'
+        },
+        {
+            field: 'continua_perdida_valvula',
+            label: '¿Se detectan pérdidas luego de operar válvula?',
+            info: 'Verificar si aparecen fugas después de maniobrar la válvula'
+        },
     ];
 
+    // Calcular progreso
     const totalVisibleQuestions = checklistItems.filter(item => shouldShow(item.field)).length;
     const answeredQuestions = checklistItems.filter(item =>
-        shouldShow(item.field) &&
-        order[item.field] !== null &&
-        order[item.field] !== undefined &&
-        order[item.field] !== ''
+        shouldShow(item.field) && (order as any)[item.field] !== null && (order as any)[item.field] !== undefined && (order as any)[item.field] !== ''
     ).length;
 
     return (
         <div className="bg-white rounded-3xl p-6 shadow-xl shadow-black/5 border border-gray-50 space-y-6 text-left animate-in slide-in-from-bottom-4">
-            <div className="flex items-center justify-between border-b border-gray-50 pb-4">
-                <div className="flex items-center space-x-3">
-                    <div className="p-2 bg-blue-50 rounded-lg"><MapPin className="w-5 h-5 text-blue-600" /></div>
-                    <h2 className="text-sm font-black uppercase tracking-widest text-gray-400">Inicio de Visita</h2>
-                </div>
 
-                {/* Indicador de progreso */}
-                <div className="flex items-center space-x-2">
-                    <span className="text-[10px] font-black text-gray-400 uppercase">
-                        {answeredQuestions}/{totalVisibleQuestions}
-                    </span>
-                    <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                        <div
-                            className="h-full bg-blue-600 transition-all duration-500"
-                            style={{ width: `${(answeredQuestions / totalVisibleQuestions) * 100}%` }}
-                        />
+            {/* Header con progreso */}
+            <div className="space-y-4">
+                <div className="flex items-center justify-between border-b border-gray-50 pb-4">
+                    <div className="flex items-center space-x-3">
+                        <div className="p-2 bg-blue-50 rounded-lg">
+                            <MapPin className="w-5 h-5 text-blue-600" />
+                        </div>
+                        <h2 className="text-sm font-black uppercase tracking-widest text-gray-400">
+                            Inicio de Visita
+                        </h2>
+                    </div>
+
+                    {/* Indicador de progreso */}
+                    <div className="flex items-center space-x-2">
+                        <span className="text-[10px] font-black text-gray-400 uppercase">
+                            {answeredQuestions}/{totalVisibleQuestions}
+                        </span>
+                        <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                            <div
+                                className="h-full bg-blue-600 transition-all duration-500"
+                                style={{ width: `${(answeredQuestions / totalVisibleQuestions) * 100}%` }}
+                            />
+                        </div>
                     </div>
                 </div>
+
+                {/* Alerta si se detecta motivo de cierre */}
+                {suggestClosureMotive(order) && suggestClosureMotive(order) !== 8 && (
+                    <div className="p-4 bg-yellow-50 border-l-4 border-yellow-400 rounded-xl animate-in slide-in-from-top-2">
+                        <div className="flex items-start space-x-3">
+                            <div className="p-1 bg-yellow-400 rounded-lg">
+                                <CheckCircle2 className="w-4 h-4 text-white" />
+                            </div>
+                            <div className="flex-1">
+                                <p className="text-[10px] font-black text-yellow-800 uppercase tracking-widest">
+                                    Inspección Completada
+                                </p>
+                                <p className="text-[11px] text-yellow-700 font-medium mt-1">
+                                    Se detectó un motivo de cierre. Al presionar "Siguiente" se saltará directo al paso de Cierre.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
 
-            {/* Alerta si se detecta motivo de cierre (Step 4) */}
-            {suggestClosureMotive(order) && suggestClosureMotive(order) !== 8 && (
-                <div className="p-4 bg-yellow-50 border-l-4 border-yellow-400 rounded-xl animate-in slide-in-from-top-2">
-                    <div className="flex items-start space-x-3">
-                        <div className="p-1 bg-yellow-400 rounded-lg">
-                            <CheckCircle2 className="w-4 h-4 text-white" />
-                        </div>
-                        <div className="flex-1">
-                            <p className="text-[10px] font-black text-yellow-800 uppercase tracking-widest">
-                                Inspección Completada
-                            </p>
-                            <p className="text-[11px] text-yellow-700 font-medium mt-1">
-                                Se detectó un motivo de cierre. Al presionar "Siguiente" se saltará directo al paso de Cierre.
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            )}
+            {/* Preguntas */}
             <div className="space-y-5">
-                {checklistItems.map((item) => shouldShow(item.field) && (
-                    <div key={item.field} className="space-y-3 animate-in fade-in slide-in-from-left-2 duration-300">
-                        <span className="text-[11px] font-black text-gray-500 uppercase tracking-widest leading-tight block">{item.label}</span>
-                        <div className="grid grid-cols-2 gap-2">
-                            {['SI', 'NO'].map((val) => (
-                                <button
-                                    key={val}
-                                    onClick={() => !readOnly && onUpdate(item.field, val)}
-                                    disabled={readOnly}
-                                    className={cn(
-                                        "py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all",
-                                        order[item.field] === val
-                                            ? (val === 'SI' ? "bg-cyan-400 text-white shadow-lg shadow-cyan-100" : "bg-red-400 text-white shadow-lg shadow-red-100")
-                                            : "bg-gray-50 text-gray-400 hover:bg-gray-100",
-                                        readOnly && "opacity-80 cursor-default"
-                                    )}
-                                >
-                                    {val === 'SI' ? 'Si' : 'No'}
-                                </button>
-                            ))}
+                {checklistItems.map((item, index) => shouldShow(item.field) && (
+                    <div
+                        key={item.field}
+                        className="space-y-3 animate-in fade-in slide-in-from-left-2 duration-300"
+                        style={{ animationDelay: `${index * 50}ms` }}
+                    >
+                        {/* Label con número */}
+                        <div className="flex items-start space-x-2">
+                            <span className="flex-shrink-0 w-5 h-5 bg-blue-100 text-blue-600 rounded-lg flex items-center justify-center text-[10px] font-black">
+                                {checklistItems.findIndex(i => i.field === item.field) + 1}
+                            </span>
+                            <div className="flex-1">
+                                <span className="text-[11px] font-black text-gray-700 leading-tight block">
+                                    {item.label}
+                                </span>
+                                {item.info && (
+                                    <span className="text-[9px] text-gray-400 font-medium mt-1 block">
+                                        {item.info}
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Botones SI/NO */}
+                        <div className="grid grid-cols-2 gap-3">
+                            {['SI', 'NO'].map((val) => {
+                                const isSelected = (order as any)[item.field] === val;
+                                const shouldHighlight =
+                                    (item.field === 'morador' && val === 'NO') ||
+                                    (item.field === 'cliente_accede_cambio' && val === 'NO') ||
+                                    (item.field === 'coincidenummedidor' && val === 'NO') ||
+                                    (item.field === 'medidor_mal_estado' && val === 'SI') ||
+                                    (item.field === 'puede_retirar' && val === 'NO') ||
+                                    (item.field === 'operar_valvula' && val === 'NO') ||
+                                    (item.field === 'continua_perdida_valvula' && val === 'SI');
+
+                                return (
+                                    <button
+                                        key={val}
+                                        onClick={() => !readOnly && onUpdate(item.field as keyof OrderData, val)}
+                                        disabled={readOnly}
+                                        className={cn(
+                                            "py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all relative overflow-hidden",
+                                            isSelected
+                                                ? (val === 'SI'
+                                                    ? "bg-cyan-400 text-white shadow-lg shadow-cyan-100"
+                                                    : "bg-red-400 text-white shadow-lg shadow-red-100")
+                                                : "bg-gray-50 text-gray-400 hover:bg-gray-100",
+                                            readOnly && "opacity-80 cursor-default",
+                                            isSelected && shouldHighlight && "ring-2 ring-yellow-400 ring-offset-2"
+                                        )}
+                                    >
+                                        <span className="relative z-10 flex items-center justify-center space-x-2">
+                                            {isSelected && <Check className="w-4 h-4" />}
+                                            <span>{val}</span>
+                                        </span>
+                                        {isSelected && shouldHighlight && (
+                                            <div className="absolute inset-0 bg-gradient-to-r from-yellow-400/20 to-transparent animate-pulse" />
+                                        )}
+                                    </button>
+                                );
+                            })}
                         </div>
                     </div>
                 ))}
