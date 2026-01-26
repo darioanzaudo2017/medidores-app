@@ -30,7 +30,8 @@ const Dashboard = () => (
 )
 
 import { Clients } from './pages/Clients'
-const MapView = () => <div className="p-8 text-left"><h1 className="text-2xl font-bold">Mapa Real-time (Próximamente)</h1></div>
+import { RealTimeMap } from './pages/RealTimeMap'
+
 const SettingsPage = () => <div className="p-8 text-left"><h1 className="text-2xl font-bold">Configuración (Próximamente)</h1></div>
 
 function App() {
@@ -83,7 +84,7 @@ function App() {
           <Route path="orden/:id/ejecutar" element={<OrderExecution />} />
           <Route path="clientes" element={<Clients />} />
           <Route path="usuarios" element={<Users />} />
-          <Route path="mapa" element={<MapView />} />
+          <Route path="mapa" element={<RealTimeMap />} />
           <Route path="config" element={<SettingsPage />} />
         </Route>
       </Routes>

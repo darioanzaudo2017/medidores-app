@@ -397,6 +397,45 @@ const OrderExecution: React.FC = () => {
         }
     };
 
+    const compressImage = async (file: File): Promise<Blob> => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = (event) => {
+                const img = new Image();
+                img.src = event.target?.result as string;
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    let width = img.width;
+                    let height = img.height;
+
+                    const max_size = 1200; // Resolución optimizada para móviles
+                    if (width > height) {
+                        if (width > max_size) {
+                            height *= max_size / width;
+                            width = max_size;
+                        }
+                    } else {
+                        if (height > max_size) {
+                            width *= max_size / height;
+                            height = max_size;
+                        }
+                    }
+
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx?.drawImage(img, 0, 0, width, height);
+                    canvas.toBlob((blob) => {
+                        if (blob) resolve(blob);
+                        else reject(new Error('Error al comprimir imagen'));
+                    }, 'image/jpeg', 0.85); // 85% calidad es el punto dulce entre peso y nitidez
+                };
+            };
+            reader.onerror = (error) => reject(error);
+        });
+    };
+
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, isVideo: boolean) => {
         const file = e.target.files?.[0];
         if (!file || !id) return;
@@ -419,11 +458,20 @@ const OrderExecution: React.FC = () => {
             const fileName = `${id}_${Date.now()}.${fileExt}`;
             const filePath = `${fileName}`;
 
+            let fileData: File | Blob = file;
+            if (!isVideo) {
+                try {
+                    fileData = await compressImage(file);
+                } catch (compErr) {
+                    console.warn('Compression failed, uploading original:', compErr);
+                }
+            }
+
             // Explicitly set contentType for better PWA/Mobile compatibility
             const { error: uploadError } = await supabase.storage
                 .from('fotomedidor')
-                .upload(filePath, file, {
-                    contentType: file.type || (isVideo ? 'video/mp4' : 'image/jpeg'),
+                .upload(filePath, fileData, {
+                    contentType: isVideo ? (file.type || 'video/mp4') : 'image/jpeg',
                     cacheControl: '3600',
                     upsert: false
                 });
@@ -454,10 +502,15 @@ const OrderExecution: React.FC = () => {
             setPhotos(prev => [...prev, mappedNewPhoto as DBPhoto]);
         } catch (err: any) {
             console.error('Error uploading file:', err);
-            const errorMessage = err.message || err.error_description || 'Error desconocido';
+            let errorMessage = err.message || err.error_description || 'Error desconocido';
+
+            if (errorMessage.includes('aborted')) {
+                errorMessage = 'La subida fue cancelada por el navegador. Esto sucede a veces si la señal móvil es muy débil. Intentá de nuevo.';
+            }
+
             toast.error(
                 `Error al subir ${isVideo ? 'video' : 'archivo'}`,
-                `${errorMessage}. Verificá tu conexión o intentá con un archivo más liviano.`
+                `${errorMessage} Verificá tu conexión.`
             );
         } finally {
             setSaving(false);
@@ -1049,11 +1102,11 @@ const ClosingStep = ({ order, motivos, onUpdate, suggested, canvasRef, startDraw
                             <div className="flex gap-2">
                                 <label className="cursor-pointer p-2 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100 transition-colors">
                                     <Camera className="w-4 h-4" />
-                                    <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => handleFileUpload(e, false)} disabled={saving || readOnly} />
+                                    <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, false)} disabled={saving || readOnly} />
                                 </label>
                                 <label className="cursor-pointer p-2 bg-purple-50 text-purple-600 rounded-xl hover:bg-purple-100 transition-colors">
                                     <Video className="w-4 h-4" />
-                                    <input type="file" accept="video/*" capture="environment" className="hidden" onChange={(e) => handleFileUpload(e, true)} disabled={saving || readOnly} />
+                                    <input type="file" accept="video/*" className="hidden" onChange={(e) => handleFileUpload(e, true)} disabled={saving || readOnly} />
                                 </label>
                             </div>
                         </div>
