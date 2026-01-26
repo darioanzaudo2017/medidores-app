@@ -107,24 +107,28 @@ export const Clients = () => {
                 text = decoder.decode(buffer);
             }
 
-            const lines = text.split(/\r?\n/);
-            const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+            const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
+            if (lines.length === 0) throw new Error('El archivo está vacío.');
 
-            const rows = lines.slice(1)
-                .filter(line => line.trim() !== '')
-                .map(line => {
-                    const values = line.split(',').map(v => v.trim());
-                    const obj: Record<string, string | null> = {};
-                    headers.forEach((header, index) => {
-                        obj[header] = values[index] || null;
-                    });
-                    // Only keep keys that are in CSV_COLUMNS
-                    const cleanObj: Record<string, unknown> = { procesado: false };
-                    CSV_COLUMNS.forEach(col => {
-                        cleanObj[col] = obj[col] || null;
-                    });
-                    return cleanObj;
+            // Detect delimiter (comma or semicolon)
+            const firstLine = lines[0];
+            const delimiter = firstLine.includes(';') ? ';' : ',';
+
+            const headers = firstLine.split(delimiter).map(h => h.trim().toLowerCase());
+
+            const rows = lines.slice(1).map(line => {
+                const values = line.split(delimiter).map(v => v.trim());
+                const obj: Record<string, string | null> = {};
+                headers.forEach((header, index) => {
+                    obj[header] = values[index] || null;
                 });
+                // Only keep keys that are in CSV_COLUMNS
+                const cleanObj: Record<string, unknown> = { procesado: false };
+                CSV_COLUMNS.forEach(col => {
+                    cleanObj[col] = obj[col] || null;
+                });
+                return cleanObj;
+            });
 
             // 1. Bulk insert into temp_carga_csv
             const { error: insertError } = await supabase
