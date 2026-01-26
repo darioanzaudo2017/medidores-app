@@ -289,6 +289,30 @@ const OrderExecution: React.FC = () => {
 
         try {
             setSaving(true);
+
+            // Capturar coordenadas GPS al momento del cierre
+            let lat = order.latcambio;
+            let lng = order.longcambio;
+
+            if (!lat || !lng) {
+                try {
+                    const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+                        navigator.geolocation.getCurrentPosition(resolve, reject, {
+                            enableHighAccuracy: true,
+                            timeout: 5000
+                        });
+                    });
+                    lat = pos.coords.latitude.toString();
+                    lng = pos.coords.longitude.toString();
+
+                    // Actualizamos localmente para el guardado final
+                    pendingUpdates.current.latcambio = lat;
+                    pendingUpdates.current.longcambio = lng;
+                } catch (geoErr) {
+                    console.warn('No se pudo capturar la ubicación GPS:', geoErr);
+                }
+            }
+
             await savePendingUpdates();
 
             // Determinar estado final: SEGUNDA VISITA o CERRADO AGENTE
