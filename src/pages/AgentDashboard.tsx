@@ -84,12 +84,12 @@ const AgentDashboard: React.FC = () => {
                 const cleanTerm = searchTerm.trim();
                 const term = `%${cleanTerm}%`;
 
-                // Construimos las condiciones de búsqueda sin cliente_apellido ya que no existe en la vista
-                let orConditions = `cliente_nombre.ilike.${term},cliente_calle.ilike.${term},cliente_numero.ilike.${term},cliente_medidor.ilike.${term}`;
+                // Solo usamos ilike en campos de texto (string)
+                let orConditions = `cliente_nombre.ilike.${term},cliente_calle.ilike.${term},cliente_medidor.ilike.${term}`;
 
-                // Si es un número, también buscamos por ID de orden
+                // Si el término es un número, buscamos coincidencia exacta en campos numéricos (id_orden, cliente_numero)
                 if (!isNaN(Number(cleanTerm)) && cleanTerm !== '') {
-                    orConditions += `,id_orden.eq.${cleanTerm}`;
+                    orConditions += `,id_orden.eq.${cleanTerm},cliente_numero.eq.${cleanTerm}`;
                 }
 
                 query = query.or(orConditions);
