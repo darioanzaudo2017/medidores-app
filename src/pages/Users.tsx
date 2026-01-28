@@ -16,6 +16,7 @@ import {
 import { cn } from '../lib/utils';
 import { useToast } from '../hooks/useToast';
 import { useAuthStore } from '../store/useAuthStore';
+import { Loader2, X, Eye, EyeOff } from 'lucide-react';
 
 interface UserRole {
     usuario_id: string;
@@ -43,6 +44,7 @@ export const Users = () => {
     const currentUserRole = useAuthStore(state => state.role);
     const [users, setUsers] = useState<UserRole[]>([]);
     const [loading, setLoading] = useState(true);
+    const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [stats, setStats] = useState({
         total: 0,
@@ -155,7 +157,7 @@ export const Users = () => {
                         Exportar CSV
                     </button>
                     <button
-                        onClick={() => toast.info('Nuevo Usuario', 'El formulario para crear nuevos usuarios está en desarrollo.')}
+                        onClick={() => setIsCreateModalOpen(true)}
                         className="flex items-center gap-2 px-6 py-2.5 bg-primary text-white rounded-xl font-bold text-sm hover:bg-primary/90 shadow-lg shadow-primary/20 transition-all"
                     >
                         <UserPlus className="w-5 h-5" />
@@ -383,6 +385,15 @@ export const Users = () => {
                     </div>
                 </div>
             </div>
+
+            <CreateUserModal
+                isOpen={isCreateModalOpen}
+                onClose={() => setIsCreateModalOpen(false)}
+                onSuccess={() => {
+                    setIsCreateModalOpen(false);
+                    fetchUsers();
+                }}
+            />
         </div>
     );
 };
@@ -423,3 +434,155 @@ const Activity = (props: React.SVGProps<SVGSVGElement>) => (
         <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
     </svg>
 );
+
+const CreateUserModal = ({ isOpen, onClose, onSuccess }: { isOpen: boolean, onClose: () => void, onSuccess: () => void }) => {
+    const toast = useToast();
+    const [loading, setLoading] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
+    const [roles, setRoles] = useState<{ id: string, nombre: string }[]>([]);
+
+    const [formData, setFormData] = useState({
+        nombre: '',
+        apellido: '',
+        email: '',
+        password: '',
+        telefono: '',
+        legajo: '',
+        tipo_usuario_id: ''
+    });
+
+    useEffect(() => {
+        if (isOpen) {
+            const fetchRoles = async () => {
+                const { data } = await supabase.from('t_tipos_usuario').select('id, nombre').order('nombre');
+                if (data) {
+                    setRoles(data);
+                    if (data.length > 0) {
+                        const agenteRole = data.find(r => r.nombre === 'AGENTE');
+                        setFormData(prev => ({ ...prev, tipo_usuario_id: agenteRole?.id || data[0].id }));
+                    }
+                }
+            };
+            fetchRoles();
+        }
+    }, [isOpen]);
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setLoading(true);
+
+        try {
+            // Llamamos a la Edge Function
+            const { data, error } = await supabase.functions.invoke('quick-service', {
+                body: {
+                    email: formData.email,
+                    password: formData.password,
+                    metadata: {
+                        nombre: formData.nombre,
+                        apellido: formData.apellido,
+                        telefono: formData.telefono,
+                        legajo: formData.legajo,
+                        tipo_usuario_id: formData.tipo_usuario_id
+                    }
+                }
+            });
+
+            if (error) throw error;
+            if (data?.error) throw new Error(data.error);
+
+            toast.success('Usuario Creado', 'El usuario ha sido registrado correctamente.');
+            onSuccess();
+        } catch (err: any) {
+            console.error('Error creating user:', err);
+            toast.error('Error al crear usuario', err.message || 'No se pudo completar la operación');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
+            <div className="bg-white dark:bg-[#2d3238] w-full max-w-lg rounded-[32px] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300">
+                <div className="p-8 border-b border-gray-100 dark:border-white/10 flex items-center justify-between bg-white dark:bg-[#2d3238] sticky top-0 z-10">
+                    <div className="flex items-center gap-4">
+                        <div className="p-3 bg-primary/10 rounded-2xl">
+                            <UserPlus className="w-6 h-6 text-primary" />
+                        </div>
+                        <div>
+                            <h3 className="text-xl font-black text-[#121617] dark:text-white uppercase tracking-tight">Nuevo Usuario</h3>
+                            <p className="text-xs font-bold text-[#688182] dark:text-gray-400 uppercase tracking-widest mt-0.5">Completá los datos personales</p>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="p-2.5 bg-gray-50 dark:bg-white/5 text-gray-400 hover:text-red-500 rounded-2xl transition-all">
+                        <X className="w-6 h-6" />
+                    </button>
+                </div>
+
+                <form onSubmit={handleSubmit} className="p-8 space-y-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black uppercase text-gray-400 px-1 tracking-widest">Nombre</label>
+                            <input required name="nombre" value={formData.nombre} onChange={handleChange} type="text" className="w-full px-5 py-4 bg-[#f8f9fa] dark:bg-white/5 border-none rounded-2xl font-bold text-sm focus:ring-2 focus:ring-primary/20 outline-none" placeholder="Ej: Juan" />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black uppercase text-gray-400 px-1 tracking-widest">Apellido</label>
+                            <input required name="apellido" value={formData.apellido} onChange={handleChange} type="text" className="w-full px-5 py-4 bg-[#f8f9fa] dark:bg-white/5 border-none rounded-2xl font-bold text-sm focus:ring-2 focus:ring-primary/20 outline-none" placeholder="Ej: Pérez" />
+                        </div>
+                    </div>
+
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase text-gray-400 px-1 tracking-widest">Email Corporativo</label>
+                        <input required name="email" value={formData.email} onChange={handleChange} type="email" className="w-full px-5 py-4 bg-[#f8f9fa] dark:bg-white/5 border-none rounded-2xl font-bold text-sm focus:ring-2 focus:ring-primary/20 outline-none" placeholder="correo@empresa.com" />
+                    </div>
+
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase text-gray-400 px-1 tracking-widest">Contraseña Acceso</label>
+                        <div className="relative">
+                            <input required name="password" value={formData.password} onChange={handleChange} type={showPassword ? 'text' : 'password'} className="w-full px-5 py-4 bg-[#f8f9fa] dark:bg-white/5 border-none rounded-2xl font-bold text-sm focus:ring-2 focus:ring-primary/20 outline-none pr-12" placeholder="••••••••" />
+                            <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-primary transition-colors">
+                                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black uppercase text-gray-400 px-1 tracking-widest">Teléfono</label>
+                            <input name="telefono" value={formData.telefono} onChange={handleChange} type="tel" className="w-full px-5 py-4 bg-[#f8f9fa] dark:bg-white/5 border-none rounded-2xl font-bold text-sm focus:ring-2 focus:ring-primary/20 outline-none" placeholder="+54 9..." />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black uppercase text-gray-400 px-1 tracking-widest">Legajo / ID</label>
+                            <input name="legajo" value={formData.legajo} onChange={handleChange} type="text" className="w-full px-5 py-4 bg-[#f8f9fa] dark:bg-white/5 border-none rounded-2xl font-bold text-sm focus:ring-2 focus:ring-primary/20 outline-none uppercase" placeholder="LG-000" />
+                        </div>
+                    </div>
+
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase text-gray-400 px-1 tracking-widest">Rol de Sistema</label>
+                        <select required name="tipo_usuario_id" value={formData.tipo_usuario_id} onChange={handleChange} className="w-full px-5 py-4 bg-[#f8f9fa] dark:bg-white/5 border-none rounded-2xl font-bold text-sm focus:ring-2 focus:ring-primary/20 outline-none appearance-none">
+                            <option value="">Seleccione un rol...</option>
+                            {roles.map(r => (
+                                <option key={r.id} value={r.id}>{r.nombre}</option>
+                            ))}
+                        </select>
+                    </div>
+                </form>
+
+                <div className="p-8 bg-[#f8f9fa] dark:bg-white/2 border-t border-gray-100 dark:border-white/10 flex gap-4">
+                    <button type="button" onClick={onClose} className="flex-1 py-4 px-6 bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-2xl font-black text-sm uppercase tracking-widest text-[#688182] hover:bg-gray-50 transition-all">
+                        Cancelar
+                    </button>
+                    <button onClick={handleSubmit} disabled={loading} className="flex-1 py-4 px-6 bg-primary text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 disabled:hover:scale-100 flex items-center justify-center gap-3">
+                        {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Crear Usuario'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};

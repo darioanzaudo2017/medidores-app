@@ -13,15 +13,16 @@ import {
     Hash,
     PenTool,
     MessageSquare,
-    QrCode,
     Eraser,
     Wrench,
     Video,
     Play,
     X,
     AlertTriangle,
-    Check
+    Check,
+    Scan
 } from 'lucide-react';
+import { Html5Qrcode } from 'html5-qrcode';
 import { cn } from '../lib/utils';
 import { useToast } from '../hooks/useToast';
 
@@ -91,6 +92,7 @@ const OrderExecution: React.FC = () => {
     const [step, setStep] = useState(1);
     const [saving, setSaving] = useState(false);
     const [lecturaRetirado, setLecturaRetirado] = useState<string>('');
+    const [isScannerOpen, setIsScannerOpen] = useState(false);
 
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [isDrawing, setIsDrawing] = useState(false);
@@ -653,6 +655,7 @@ const OrderExecution: React.FC = () => {
                                 }
                             }}
                             readOnly={isClosed}
+                            onOpenScanner={() => setIsScannerOpen(true)}
                         />
                     )}
                     {step === 4 && (
@@ -675,6 +678,16 @@ const OrderExecution: React.FC = () => {
                         />
                     )}
                 </div>
+
+                <ScannerModal
+                    isOpen={isScannerOpen}
+                    onClose={() => setIsScannerOpen(false)}
+                    onScan={(result) => {
+                        updateField('medidor_nuevo', result, true);
+                        setIsScannerOpen(false);
+                        toast.success('Escaneo Exitoso', `Medidor: ${result}`);
+                    }}
+                />
             </main>
 
             {/* Footer */}
@@ -964,9 +977,10 @@ interface WorkStepProps {
     lecturaRetirado: string;
     setLecturaRetirado: (val: string) => void;
     readOnly?: boolean;
+    onOpenScanner: () => void;
 }
 
-const WorkStep = ({ order, onUpdate, lecturaRetirado, setLecturaRetirado, readOnly }: WorkStepProps) => {
+const WorkStep = ({ order, onUpdate, lecturaRetirado, setLecturaRetirado, readOnly, onOpenScanner }: WorkStepProps) => {
     const diff = lecturaRetirado ? parseFloat(lecturaRetirado) - order.cliente_lectura : 0;
 
     return (
@@ -998,7 +1012,14 @@ const WorkStep = ({ order, onUpdate, lecturaRetirado, setLecturaRetirado, readOn
                             <label className="text-[10px] font-black uppercase text-gray-400 px-1">Nueva Serie Medidor</label>
                             <div className="relative">
                                 <input type="text" readOnly={readOnly} value={order.medidor_nuevo || ''} onChange={(e) => onUpdate('medidor_nuevo', e.target.value)} className="w-full px-5 py-4 bg-gray-50 rounded-2xl font-black text-lg focus:ring-2 focus:ring-blue-500/10 outline-none disabled:opacity-50" />
-                                <button disabled={readOnly} className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-blue-600 text-white rounded-xl disabled:opacity-50"><QrCode className="w-5 h-5" /></button>
+                                <button
+                                    type="button"
+                                    disabled={readOnly}
+                                    onClick={onOpenScanner}
+                                    className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-blue-600 text-white rounded-xl disabled:opacity-50 hover:bg-blue-700 transition-colors shadow-lg shadow-blue-200"
+                                >
+                                    <Scan className="w-5 h-5" />
+                                </button>
                             </div>
                         </div>
                         <div className="space-y-1">
@@ -1181,5 +1202,99 @@ const InfoItem = ({ label, value }: { label: string, value: string | number }) =
         <p className="text-sm font-black text-gray-900 truncate">{value || '---'}</p>
     </div>
 );
+
+interface ScannerModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    onScan: (result: string) => void;
+}
+
+const ScannerModal = ({ isOpen, onClose, onScan }: ScannerModalProps) => {
+    const scannerRef = useRef<Html5Qrcode | null>(null);
+    const regionId = "reader";
+
+    useEffect(() => {
+        if (isOpen) {
+            const timer = setTimeout(() => {
+                scannerRef.current = new Html5Qrcode(regionId);
+                const config = {
+                    fps: 10,
+                    qrbox: { width: 250, height: 250 },
+                    aspectRatio: 1.0
+                };
+
+                scannerRef.current.start(
+                    { facingMode: "environment" },
+                    config,
+                    (decodedText: string) => {
+                        onScan(decodedText);
+                    },
+                    () => { }
+                ).catch(err => {
+                    console.error("Scanner start error:", err);
+                });
+            }, 300);
+
+            return () => {
+                clearTimeout(timer);
+                if (scannerRef.current && scannerRef.current.isScanning) {
+                    scannerRef.current.stop().then(() => {
+                        if (scannerRef.current) {
+                            scannerRef.current.clear();
+                        }
+                    }).catch(err => console.error("Scanner stop error:", err));
+                }
+            };
+        }
+    }, [isOpen, onScan]);
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
+            <div className="bg-white w-full max-w-md rounded-[32px] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300">
+                <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+                    <div>
+                        <h3 className="text-sm font-black uppercase tracking-widest text-gray-900">Escanear Medidor</h3>
+                        <p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest mt-0.5">Apunta al código de barras</p>
+                    </div>
+                    <button onClick={onClose} className="p-2 bg-gray-50 text-gray-400 rounded-2xl hover:bg-gray-100 transition-colors">
+                        <X className="w-5 h-5" />
+                    </button>
+                </div>
+
+                <div className="p-6">
+                    <div id={regionId} className="w-full aspect-square rounded-[24px] overflow-hidden bg-gray-900 border-4 border-gray-50 shadow-inner relative">
+                        <div className="absolute inset-0 border-2 border-blue-500/30 rounded-[20px] pointer-events-none z-10" />
+                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[250px] h-[250px] border-2 border-blue-400 border-dashed rounded-3xl pointer-events-none z-10 opacity-50" />
+                        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-blue-400 to-transparent shadow-[0_0_15px_rgba(59,130,246,0.5)] animate-scan-line z-10" />
+                    </div>
+                </div>
+
+                <div className="p-6 bg-gray-50/50 flex flex-col items-center">
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest text-center mb-0">
+                        Asegúrese de tener buena iluminación
+                    </p>
+                </div>
+            </div>
+
+            <style>{`
+                @keyframes scan-line {
+                    0% { top: 0%; opacity: 0; }
+                    10% { opacity: 1; }
+                    90% { opacity: 1; }
+                    100% { top: 100%; opacity: 0; }
+                }
+                .animate-scan-line {
+                    animation: scan-line 2s ease-in-out infinite;
+                }
+                #reader__scan_region video {
+                    object-fit: cover !important;
+                    border-radius: 20px;
+                }
+            `}</style>
+        </div>
+    );
+};
 
 export default OrderExecution;
