@@ -20,7 +20,9 @@ import {
     X,
     AlertTriangle,
     Check,
-    Scan
+    Scan,
+    Image as ImageIcon,
+    Upload
 } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
 import { cn } from '../lib/utils';
@@ -81,6 +83,56 @@ interface DBPhoto {
     video: boolean;
 }
 
+const shouldShow = (field: string, ord: OrderData) => {
+    if (!ord) return false;
+    switch (field) {
+        case 'morador':
+            return true;
+        case 'gabinete_linea':
+            return ord.morador === 'NO';
+        case 'cliente_accede_cambio':
+            return ord.morador === 'SI';
+        case 'coincidenummedidor':
+            return ord.morador === 'SI' && ord.cliente_accede_cambio === 'SI';
+        case 'medidor_mal_estado':
+            return ord.morador === 'SI' &&
+                ord.cliente_accede_cambio === 'SI' &&
+                ord.coincidenummedidor === 'SI';
+        case 'posee_reja_soldadura':
+            return (ord.morador === 'SI' && ord.cliente_accede_cambio === 'SI' && ord.coincidenummedidor === 'SI' && ord.medidor_mal_estado === 'NO');
+        case 'puede_retirar':
+            return ord.posee_reja_soldadura === 'SI';
+        case 'fuga_fuera_zona':
+            return ord.medidor_mal_estado === 'NO' &&
+                (ord.posee_reja_soldadura === 'NO' || ord.puede_retirar === 'SI');
+        case 'perdida_valvula':
+            return ord.fuga_fuera_zona === 'SI';
+        case 'operar_valvula':
+            return ord.fuga_fuera_zona === 'SI' && ord.perdida_valvula === 'SI';
+        case 'continua_perdida_valvula':
+            return ord.operar_valvula === 'SI';
+        case 'existe_litracion':
+            return (ord.morador === 'SI' && ord.fuga_fuera_zona === 'NO') || (ord.operar_valvula === 'SI' && ord.continua_perdida_valvula === 'NO');
+        default:
+            return false;
+    }
+};
+
+const checklistItems = [
+    { field: 'morador', label: '¿Hay morador presente?' },
+    { field: 'gabinete_linea', label: '¿Gabinete en Línea Municipal?' },
+    { field: 'cliente_accede_cambio', label: '¿Cliente accede a que se realice el cambio?' },
+    { field: 'coincidenummedidor', label: 'Coincide con medidor Num' },
+    { field: 'medidor_mal_estado', label: '¿Gabinete deteriorado o conexión irregular?' },
+    { field: 'posee_reja_soldadura', label: '¿Posee reja o soldadura?' },
+    { field: 'puede_retirar', label: '¿Se puede retirar la reja/soldadura?' },
+    { field: 'fuga_fuera_zona', label: '¿Se detectan fugas fuera de la zona de intervención?' },
+    { field: 'perdida_valvula', label: '¿Pérdida en válvula?' },
+    { field: 'operar_valvula', label: '¿Se puede operar la válvula?' },
+    { field: 'continua_perdida_valvula', label: '¿Se detectan pérdidas luego de operar válvula?' },
+    { field: 'existe_litracion', label: '¿Existe Litración?' },
+];
+
 const OrderExecution: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
@@ -120,7 +172,27 @@ const OrderExecution: React.FC = () => {
     const updateField = (field: string, value: unknown, immediate = false) => {
         if (!order) return;
 
-        setOrder(prev => prev ? ({ ...prev, [field]: value }) : null);
+        const newOrder = { ...order, [field]: value };
+
+        // 1. Limpieza de campos condicionales
+        checklistItems.forEach(item => {
+            if (!shouldShow(item.field, newOrder)) {
+                const key = item.field as keyof OrderData;
+                if (newOrder[key] !== null && newOrder[key] !== undefined && newOrder[key] !== '') {
+                    (newOrder as unknown as Record<string, unknown>)[key] = null;
+                    pendingUpdates.current[key] = null;
+                }
+            }
+        });
+
+        // 2. Sincronización automática de Motivo de Cierre
+        const suggested = suggestClosureMotive(newOrder);
+        if (suggested && suggested !== 8) {
+            newOrder.motivo_de_cierre = suggested;
+            pendingUpdates.current.motivo_de_cierre = suggested;
+        }
+
+        setOrder(newOrder);
         pendingUpdates.current[field] = value;
 
         if (immediate) {
@@ -152,11 +224,13 @@ const OrderExecution: React.FC = () => {
             }
 
             // Motivos
-            const { data: motivosData } = await supabase
+            const { data: motivosData, error: motivosError } = await supabase
                 .from('t_motivos_cierre')
-                .select('id, Motivo')
+                .select('*')
                 .order('id');
-            if (motivosData) setMotivos(motivosData);
+
+            if (motivosError) throw motivosError;
+            setMotivos(motivosData as MotivoCierre[]);
 
             // Photos
             const { data: photosData } = await supabase
@@ -165,16 +239,20 @@ const OrderExecution: React.FC = () => {
                 .eq('orden_id', parseInt(id!));
 
             if (photosData) {
-                // Map the data to ensure we have an 'id' property even if the column is named differently (e.g. id_foto)
-                const mappedPhotos = photosData.map((p: any) => ({
-                    ...p,
-                    id: p.id || p.id_foto || p.id_fotos || Object.values(p)[0] // Extreme fallback
-                }));
+                // Map the data to ensure we have an 'id' property even if the column is named differently
+                const mappedPhotos = photosData.map((p) => {
+                    const photoData = p as { id?: string; id_foto?: string; id_fotos?: string };
+                    return {
+                        ...p,
+                        id: photoData.id || photoData.id_foto || photoData.id_fotos || Object.values(p)[0]
+                    };
+                });
                 setPhotos(mappedPhotos as DBPhoto[]);
             }
 
-        } catch (err) {
-            console.error('Error fetching order details:', err);
+        } catch (err: unknown) {
+            const error = err as Error;
+            console.error('Error fetching order details:', error);
         } finally {
             setLoading(false);
         }
@@ -182,6 +260,9 @@ const OrderExecution: React.FC = () => {
 
     useEffect(() => {
         fetchOrderDetails();
+        return () => {
+            if (saveTimeoutRef.current) window.clearTimeout(saveTimeoutRef.current);
+        };
     }, [fetchOrderDetails]);
 
     const isClosed = order?.estado_nombre === 'CERRADO AGENTE';
@@ -189,37 +270,52 @@ const OrderExecution: React.FC = () => {
     const suggestClosureMotive = (ord: OrderData | null): number | null => {
         if (!ord) return null;
 
-        // 1. Hay morador NO
-        // Si ya tiene una fecha de primera visita (o ya fue visitado), es la segunda visita (Cierre definitivo)
+        // 1. Morador NO
         if (ord.morador === 'NO') {
-            return ord.fecha_primera_visita ? 9 : 1;
+            // Si NO está en línea municipal -> Cierre ID 13 (Mapeo manual ya que no existe en DB)
+            if (ord.gabinete_linea === 'NO') return 13;
+            // Si está en línea municipal -> Flujo de Visitas
+            // El ID 1 es "Cierre segunda visita sin morador"
+            if (ord.gabinete_linea === 'SI') return ord.fecha_primera_visita ? 1 : null;
+            return null;
         }
 
-        // 2. Cliente accede NO
+        // 2. Cliente accede NO -> ID 2
         if (ord.cliente_accede_cambio === 'NO') return 2;
 
-        // 3. Coincide medidor NO
-        if (ord.coincidenummedidor === 'NO') return 3;
+        // 3. Coincide medidor NO -> ID 9
+        if (ord.coincidenummedidor === 'NO') return 9;
 
-        // 4. Gabinete deteriorado SI
-        if (ord.medidor_mal_estado === 'SI') return 4;
+        // 4. Mal estado / Conexión irregular -> ID 3
+        if (ord.medidor_mal_estado === 'SI') return 3;
 
-        // 5. Puede retirar reja NO (si tiene reja)
-        if (ord.posee_reja_soldadura === 'SI' && ord.puede_retirar === 'NO') return 5;
+        // 5. Reja -> Si NO puede retirar -> ID 7
+        if (ord.posee_reja_soldadura === 'SI' && ord.puede_retirar === 'NO') return 7;
 
-        // 6. Perdida en válvula SI
-        if (ord.perdida_valvula === 'SI') return 7;
+        // 6. Fugas Fuera de Zona
+        if (ord.fuga_fuera_zona === 'SI') {
+            // SI Fuga fuera Y NO pérdida en válvula -> ID 4 (Pérdida Interna)
+            if (ord.perdida_valvula === 'NO') return 4;
+            // SI Fuga fuera Y SI pérdida en válvula -> Continúa a Operar Válvula
+        }
 
-        // 7. Se puede operar válvula NO
-        if (ord.operar_valvula === 'NO') return 10;
+        // 7. Válvula
+        if (ord.operar_valvula === 'NO') return 5;
+        if (ord.continua_perdida_valvula === 'SI') return 6;
 
-        // 8. Perdidas luego operar SI
-        if (ord.continua_perdida_valvula === 'SI') return 11;
+        // 8. Litración -> ID 4 (Pérdida Interna)
+        if (ord.existe_litracion === 'SI') return 4;
 
-        // Caso fuga fuera de zona (opcional, lo mantenemos por consistencia)
-        if (ord.fuga_fuera_zona === 'SI') return 6;
+        // Especial: Pérdida en válvula previa (si no se pudo operar por ejemplo)
+        if (ord.perdida_valvula === 'SI' && ord.operar_valvula === 'SI' && ord.continua_perdida_valvula === 'NO') {
+            // Este es el camino de éxito tras reparar/operar, pero si el flujo marca pérdida crítica:
+            // return 7; // Solo si se decide cerrar por pérdida en válvula sin intentar operar
+        }
 
-        return 8; // Normal (Continúa a Instalación)
+        // 8. Litración (Pregunta final antes del cierre)
+        if (ord.existe_litracion === 'SI') return 12; // ID 12 (Pérdida Interna)
+
+        return 8; // Normal (Continúa a Instalación o Cierre Exitoso)
     };
 
     const updateProgress = async (nextStep: number) => {
@@ -231,10 +327,6 @@ const OrderExecution: React.FC = () => {
         // Si detectamos un motivo de cierre en el paso 2, saltamos directo al paso 4
         if (step === 2 && nextStep === 3 && suggested && suggested !== 8) {
             targetStep = 4;
-            // Auto-asignamos el motivo si no está seteado
-            if (!order.motivo_de_cierre) {
-                updateField('motivo_de_cierre', suggested, true);
-            }
         }
 
         setStep(targetStep);
@@ -499,12 +591,13 @@ const OrderExecution: React.FC = () => {
             // Re-map the new photo to ensure ID consistency
             const mappedNewPhoto = {
                 ...newPhoto,
-                id: (newPhoto as any).id || (newPhoto as any).id_foto || (newPhoto as any).id_fotos
+                id: (newPhoto as Record<string, any>).id || (newPhoto as Record<string, any>).id_foto || (newPhoto as Record<string, any>).id_fotos
             };
             setPhotos(prev => [...prev, mappedNewPhoto as DBPhoto]);
-        } catch (err: any) {
-            console.error('Error uploading file:', err);
-            let errorMessage = err.message || err.error_description || 'Error desconocido';
+        } catch (err: unknown) {
+            const error = err as Error;
+            console.error('Error uploading file:', error);
+            let errorMessage = error.message || 'Error desconocido';
 
             if (errorMessage.includes('aborted')) {
                 errorMessage = 'La subida fue cancelada por el navegador. Esto sucede a veces si la señal móvil es muy débil. Intentá de nuevo.';
@@ -638,6 +731,7 @@ const OrderExecution: React.FC = () => {
                             onUpdate={(f: keyof OrderData, v: string) => updateField(f, v, true)}
                             readOnly={isClosed}
                             suggestClosureMotive={suggestClosureMotive}
+                            motivos={motivos}
                         />
                     )}
                     {step === 3 && (
@@ -744,111 +838,33 @@ const SummaryStep = ({ order }: { order: OrderData }) => (
     </div>
 );
 
-const InspectionStep = ({ order, onUpdate, readOnly, suggestClosureMotive }: { order: OrderData, onUpdate: (f: keyof OrderData, v: string) => void, readOnly?: boolean, suggestClosureMotive: (ord: OrderData | null) => number | null }) => {
 
-    // Función mejorada de visibilidad según flujograma
-    const shouldShow = (field: string): boolean => {
-        switch (field) {
-            case 'morador':
-                return true;
+const InspectionStep = ({ order, onUpdate, readOnly, suggestClosureMotive, motivos }: { order: OrderData, onUpdate: (f: keyof OrderData, v: string) => void, readOnly?: boolean, suggestClosureMotive: (ord: OrderData | null) => number | null, motivos: MotivoCierre[] }) => {
 
-            case 'cliente_accede_cambio':
-                return order.morador === 'SI';
+    // Función de visibilidad local que usa la global
+    const localShouldShow = (field: string) => shouldShow(field, order);
 
-            case 'coincidenummedidor':
-                return order.morador === 'SI' && order.cliente_accede_cambio === 'SI';
-
-            case 'medidor_mal_estado':
-                return order.morador === 'SI' &&
-                    order.cliente_accede_cambio === 'SI' &&
-                    order.coincidenummedidor === 'SI';
-
-            case 'posee_reja_soldadura':
-                return order.morador === 'SI' &&
-                    order.cliente_accede_cambio === 'SI' &&
-                    order.coincidenummedidor === 'SI' &&
-                    order.medidor_mal_estado === 'NO';
-
-            case 'puede_retirar':
-                return order.posee_reja_soldadura === 'SI';
-
-            case 'fuga_fuera_zona':
-                return order.medidor_mal_estado === 'NO' &&
-                    (order.posee_reja_soldadura === 'NO' || order.puede_retirar === 'SI');
-
-            case 'perdida_valvula':
-                return order.fuga_fuera_zona === 'NO';
-
-            case 'operar_valvula':
-                return order.fuga_fuera_zona === 'NO' && order.perdida_valvula === 'NO';
-
-            case 'continua_perdida_valvula':
-                return order.operar_valvula === 'SI';
-
-            default:
-                return false;
-        }
-    };
-
-    // Items en el orden correcto según flujograma
-    const checklistItems = [
-        {
-            field: 'morador',
-            label: '¿Hay morador presente?',
-            info: 'Primera pregunta crítica - Si NO hay morador, se programa segunda visita'
-        },
-        {
-            field: 'cliente_accede_cambio',
-            label: '¿Cliente accede a que se realice el cambio?',
-            info: 'Si NO acepta, se cierra la orden por negativa del cliente'
-        },
-        {
-            field: 'coincidenummedidor',
-            label: `Coincide con medidor Num: ${order.cliente_medidor}`,
-            info: 'Verificar que el número de serie del medidor coincida'
-        },
-        {
-            field: 'medidor_mal_estado',
-            label: '¿Gabinete/Medidor deteriorado o manipulado?',
-            info: 'Si está deteriorado, se cierra por mal estado'
-        },
-        {
-            field: 'posee_reja_soldadura',
-            label: '¿Posee reja o soldadura?',
-            info: 'Verificar si hay obstáculos físicos para acceder al medidor'
-        },
-        {
-            field: 'puede_retirar',
-            label: '¿Se puede retirar la reja/soldadura?',
-            info: 'Si NO se puede retirar, se cierra la orden'
-        },
-        {
-            field: 'fuga_fuera_zona',
-            label: '¿Se detectan fugas fuera de la zona de intervención?',
-            info: 'Fugas en tubería antes del medidor'
-        },
-        {
-            field: 'perdida_valvula',
-            label: '¿Pérdida en válvula?',
-            info: 'Verificar si la válvula tiene fugas antes de operar'
-        },
-        {
-            field: 'operar_valvula',
-            label: '¿Se puede operar la válvula?',
-            info: 'Intentar abrir/cerrar la válvula de paso'
-        },
-        {
-            field: 'continua_perdida_valvula',
-            label: '¿Se detectan pérdidas luego de operar válvula?',
-            info: 'Verificar si aparecen fugas después de maniobrar la válvula'
-        },
+    const displayChecklist = [
+        { ...checklistItems[0], info: 'Verificar presencia de personas en el domicilio' },
+        { ...checklistItems[1], info: 'Si NO es primera visita y NO está en línea, se cierra' },
+        { ...checklistItems[2], info: 'Si NO acepta, se cierra la orden por negativa del cliente' },
+        { ...checklistItems[3], label: `Coincide con medidor Num: ${order.cliente_medidor}`, info: 'Verificar que el número de serie coincida' },
+        { ...checklistItems[4], info: 'Si está deteriorado o manipulado, se cierra la orden' },
+        { ...checklistItems[5], info: 'Verificar obstáculos físicos' },
+        { ...checklistItems[6], info: 'Si NO se puede retirar, se cierra la orden' },
+        { ...checklistItems[7], info: 'Fugas en tramos fuera de nuestra intervención' },
+        { ...checklistItems[8], info: 'Solo si se detectó fuga fuera de zona' },
+        { ...checklistItems[9], info: 'Intentar maniobrar la llave de paso' },
+        { ...checklistItems[10], info: 'Verificar estanqueidad post-maniobra' },
+        { ...checklistItems[11], info: 'Verificar si el medidor registra consumo sin demanda' },
     ];
 
     // Calcular progreso
-    const totalVisibleQuestions = checklistItems.filter(item => shouldShow(item.field)).length;
-    const answeredQuestions = checklistItems.filter(item =>
-        shouldShow(item.field) && (order as any)[item.field] !== null && (order as any)[item.field] !== undefined && (order as any)[item.field] !== ''
-    ).length;
+    const totalVisibleQuestions = checklistItems.filter(item => localShouldShow(item.field)).length;
+    const answeredQuestions = checklistItems.filter(item => {
+        const key = item.field as keyof OrderData;
+        return localShouldShow(item.field) && order[key] !== null && order[key] !== undefined && order[key] !== '';
+    }).length;
 
     return (
         <div className="bg-white rounded-3xl p-6 shadow-xl shadow-black/5 border border-gray-50 space-y-6 text-left animate-in slide-in-from-bottom-4">
@@ -891,7 +907,15 @@ const InspectionStep = ({ order, onUpdate, readOnly, suggestClosureMotive }: { o
                                     Inspección Completada
                                 </p>
                                 <p className="text-[11px] text-yellow-700 font-medium mt-1">
-                                    Se detectó un motivo de cierre. Al presionar "Siguiente" se saltará directo al paso de Cierre.
+                                    Se detectó: <span className="font-bold text-yellow-900 uppercase">
+                                        {(() => {
+                                            const suggestedId = suggestClosureMotive(order);
+                                            if (suggestedId === 13) return 'GABINETE FUERA DE LÍNEA MUNICIPAL';
+                                            const motive = motivos.find(m => m.id === suggestedId);
+                                            return motive ? motive.Motivo : `MOTIVO DE CIERRE (ID: ${suggestedId})`;
+                                        })()}
+                                    </span>.
+                                    Al presionar "Siguiente" se saltará directo al paso de Cierre.
                                 </p>
                             </div>
                         </div>
@@ -901,7 +925,7 @@ const InspectionStep = ({ order, onUpdate, readOnly, suggestClosureMotive }: { o
 
             {/* Preguntas */}
             <div className="space-y-5">
-                {checklistItems.map((item, index) => shouldShow(item.field) && (
+                {displayChecklist.map((item, index) => localShouldShow(item.field) && (
                     <div
                         key={item.field}
                         className="space-y-3 animate-in fade-in slide-in-from-left-2 duration-300"
@@ -924,18 +948,19 @@ const InspectionStep = ({ order, onUpdate, readOnly, suggestClosureMotive }: { o
                             </div>
                         </div>
 
-                        {/* Botones SI/NO */}
                         <div className="grid grid-cols-2 gap-3">
                             {['SI', 'NO'].map((val) => {
-                                const isSelected = (order as any)[item.field] === val;
+                                const isSelected = order[item.field as keyof OrderData] === val;
                                 const shouldHighlight =
                                     (item.field === 'morador' && val === 'NO') ||
+                                    (item.field === 'gabinete_linea') || // Ambos caminos (SI/NO) son cierres si no hay morador
                                     (item.field === 'cliente_accede_cambio' && val === 'NO') ||
                                     (item.field === 'coincidenummedidor' && val === 'NO') ||
                                     (item.field === 'medidor_mal_estado' && val === 'SI') ||
                                     (item.field === 'puede_retirar' && val === 'NO') ||
                                     (item.field === 'operar_valvula' && val === 'NO') ||
-                                    (item.field === 'continua_perdida_valvula' && val === 'SI');
+                                    (item.field === 'continua_perdida_valvula' && val === 'SI') ||
+                                    (item.field === 'existe_litracion' && val === 'SI');
 
                                 return (
                                     <button
@@ -1106,7 +1131,7 @@ const ClosingStep = ({ order, motivos, onUpdate, suggested, canvasRef, startDraw
                         <label className="text-[10px] font-black uppercase text-gray-400 px-1">Motivo de Cierre</label>
                         <select
                             disabled={readOnly}
-                            value={order.motivo_de_cierre || suggested || ''}
+                            value={order.motivo_de_cierre || ''}
                             onChange={(e) => onUpdate('motivo_de_cierre', parseInt(e.target.value), true)}
                             className="w-full px-5 py-4 bg-gray-50 rounded-2xl font-black text-sm focus:ring-2 focus:ring-blue-500/10 outline-none disabled:opacity-50 appearance-none"
                         >
@@ -1121,14 +1146,29 @@ const ClosingStep = ({ order, motivos, onUpdate, suggested, canvasRef, startDraw
                         <div className="flex items-center justify-between px-1">
                             <label className="text-[10px] font-black uppercase text-gray-400">Evidencias ({photos.length})</label>
                             <div className="flex gap-2">
-                                <label className="cursor-pointer p-2 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100 transition-colors">
-                                    <Camera className="w-4 h-4" />
-                                    <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, false)} disabled={saving || readOnly} />
-                                </label>
-                                <label className="cursor-pointer p-2 bg-purple-50 text-purple-600 rounded-xl hover:bg-purple-100 transition-colors">
-                                    <Video className="w-4 h-4" />
-                                    <input type="file" accept="video/*" className="hidden" onChange={(e) => handleFileUpload(e, true)} disabled={saving || readOnly} />
-                                </label>
+                                {/* Opciones de Foto */}
+                                <div className="flex bg-blue-50 rounded-2xl overflow-hidden border border-blue-100 shadow-sm shadow-blue-100/50">
+                                    <label title="Sacar Foto" className="cursor-pointer p-4 text-blue-600 hover:bg-blue-100 transition-colors border-r border-blue-100">
+                                        <Camera className="w-6 h-6" />
+                                        <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => handleFileUpload(e, false)} disabled={saving || readOnly} />
+                                    </label>
+                                    <label title="Subir de Galería" className="cursor-pointer p-4 text-blue-500 hover:bg-blue-100 transition-colors">
+                                        <ImageIcon className="w-6 h-6" />
+                                        <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, false)} disabled={saving || readOnly} />
+                                    </label>
+                                </div>
+
+                                {/* Opciones de Video */}
+                                <div className="flex bg-purple-50 rounded-2xl overflow-hidden border border-purple-100 shadow-sm shadow-purple-100/50">
+                                    <label title="Grabar Video" className="cursor-pointer p-4 text-purple-600 hover:bg-purple-100 transition-colors border-r border-purple-100">
+                                        <Video className="w-6 h-6" />
+                                        <input type="file" accept="video/*" capture="environment" className="hidden" onChange={(e) => handleFileUpload(e, true)} disabled={saving || readOnly} />
+                                    </label>
+                                    <label title="Subir Video" className="cursor-pointer p-4 text-purple-500 hover:bg-purple-100 transition-colors">
+                                        <Upload className="w-6 h-6" />
+                                        <input type="file" accept="video/*" className="hidden" onChange={(e) => handleFileUpload(e, true)} disabled={saving || readOnly} />
+                                    </label>
+                                </div>
                             </div>
                         </div>
 

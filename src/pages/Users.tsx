@@ -497,9 +497,10 @@ const CreateUserModal = ({ isOpen, onClose, onSuccess }: { isOpen: boolean, onCl
 
             toast.success('Usuario Creado', 'El usuario ha sido registrado correctamente.');
             onSuccess();
-        } catch (err: any) {
-            console.error('Error creating user:', err);
-            toast.error('Error al crear usuario', err.message || 'No se pudo completar la operación');
+        } catch (err: unknown) {
+            const error = err as any;
+            console.error('Error creating user:', error);
+            toast.error('Error al crear usuario', error.message || 'No se pudo completar la operación');
         } finally {
             setLoading(false);
         }

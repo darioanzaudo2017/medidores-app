@@ -168,7 +168,7 @@ export const OrderDetail = () => {
                 .eq('orden_id', parseInt(id!));
 
             if (photosData) {
-                const mappedPhotos = photosData.map((p: any) => ({
+                const mappedPhotos = photosData.map((p: Record<string, any>) => ({
                     ...p,
                     id: p.id || p.id_foto || p.id_fotos || Object.values(p)[0]
                 }));
