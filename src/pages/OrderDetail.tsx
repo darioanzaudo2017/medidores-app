@@ -86,6 +86,9 @@ interface OrderDetailData {
     latcambio: string;
     longcambio: string;
     fimardigital: string;
+    medidor_nuevo: string;
+    observaciones_agente: string;
+    observacionmotivo: string;
 }
 
 interface DBPhoto {
@@ -450,7 +453,7 @@ export const OrderDetail = () => {
                                     />
                                     <MeterBlock
                                         label="LECTURA CAPTURADA"
-                                        serial={order.cliente_medidor}
+                                        serial={order.medidor_nuevo || order.cliente_medidor}
                                         value={order.lectura_nueva}
                                         type="Entrada de Campo"
                                         primary
@@ -554,12 +557,28 @@ export const OrderDetail = () => {
                             <div className="space-y-5">
                                 <DetailItem label="Agente de Campo Asignado" value={`${order.agente_nombre} ${order.agente_apellido}`} />
                                 <DetailItem label="Contacto del Agente" value={order.agente_email} muted />
+                                <DetailItem label="Nueva Serie Medidor" value={order.medidor_nuevo} />
                                 <DetailItem label="Motivo de Cierre" value={order.motivo_cierre_nombre} />
                                 <DetailItem label="Primera Visita" value={order.fecha_primera_visita ? new Date(order.fecha_primera_visita).toLocaleString() : '---'} />
                                 <div className="flex justify-between py-2 items-center">
                                     <span className="text-[11px] font-bold text-[#618789] uppercase tracking-widest">Índice de Prioridad</span>
                                     <span className="px-3 py-1 bg-green-500/10 text-green-500 rounded-lg text-[10px] font-black uppercase tracking-widest">Normal</span>
                                 </div>
+                                {order.observaciones_agente && (
+                                    <div className="pt-4 border-t border-gray-100 dark:border-white/5">
+                                        <p className="text-[10px] font-black text-[#618789] uppercase tracking-widest mb-2">Observaciones del Agente</p>
+                                        <div className="p-3 bg-gray-50 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-white/10">
+                                            <p className="text-xs font-bold text-[#121617] dark:text-white leading-relaxed">
+                                                {order.observaciones_agente}
+                                                {order.observacionmotivo && (
+                                                    <span className="block mt-2 pt-2 border-t border-gray-200 dark:border-white/5 italic opacity-80">
+                                                        Detalles motivo: {order.observacionmotivo}
+                                                    </span>
+                                                )}
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
 
